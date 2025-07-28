@@ -46,13 +46,6 @@ dependencies {
     implementation("software.amazon.awssdk:s3-transfer-manager:2.21.0")
     implementation("software.amazon.awssdk:core:2.21.0")
     
-    // RAG and AI components - using latest stable versions
-    implementation("dev.langchain4j:langchain4j:0.35.0")
-    implementation("dev.langchain4j:langchain4j-embeddings-all-minilm-l6-v2:0.35.0")
-    
-    // OpenAI for LLM
-    implementation("dev.langchain4j:langchain4j-open-ai:0.35.0")
-    
     // Testing
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.springframework.modulith:spring-modulith-starter-test")
