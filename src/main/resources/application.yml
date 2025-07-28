@@ -1,0 +1,137 @@
+spring:
+  application:
+    name: query-analyzer
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:local}
+  
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/queryanalyzer}
+    username: ${DB_USERNAME:queryanalyzer}
+    password: ${DB_PASSWORD:password}
+    driver-class-name: org.postgresql.Driver
+  
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: ${SPRING_JPA_SHOW_SQL:false}
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+  
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
+server:
+  port: ${SERVER_PORT:8080}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+
+# AWS Configuration (environment-specific via env vars)
+aws:
+  s3:
+    endpoint: ${AWS_S3_ENDPOINT:}
+    region: ${AWS_REGION:us-east-1}
+    access-key: ${AWS_ACCESS_KEY:}
+    secret-key: ${AWS_SECRET_KEY:}
+    path-style-access: ${AWS_S3_PATH_STYLE:false}
+
+# Application Configuration
+app:
+  reports:
+    s3:
+      bucket: ${REPORTS_S3_BUCKET:query-analyzer-reports}
+      prefix: ${REPORTS_S3_PREFIX:reports/}
+  
+  openai:
+    api-key: ${OPENAI_API_KEY:}
+  
+  analysis:
+    confidence-threshold: ${ANALYSIS_CONFIDENCE_THRESHOLD:0.7}
+    use-local-llm: ${USE_LOCAL_LLM:false}
+
+# Ollama Configuration (for local development)
+ollama:
+  endpoint: ${OLLAMA_ENDPOINT:http://localhost:11434}
+  model: ${OLLAMA_MODEL:llama3.2:latest}
+
+logging:
+  level:
+    com.queryanalyzer: ${LOG_LEVEL:INFO}
+    org.springframework.modulith: ${LOG_LEVEL_MODULITH:INFO}
+    software.amazon.awssdk: ${LOG_LEVEL_AWS:WARN}
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+
+---
+# Local Development Profile
+spring:
+  config:
+    activate:
+      on-profile: local
+
+aws:
+  s3:
+    endpoint: http://localhost:4566  # LocalStack
+    access-key: test
+    secret-key: test
+    path-style-access: true
+
+app:
+  analysis:
+    use-local-llm: true
+
+logging:
+  level:
+    com.queryanalyzer: DEBUG
+
+---
+# Docker/Container Profile
+spring:
+  config:
+    activate:
+      on-profile: docker
+  
+  datasource:
+    url: jdbc:postgresql://postgres:5432/queryanalyzer
+
+logging:
+  pattern:
+    console: "%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+
+---
+# Test Profile (for unit tests - no S3 dependency)
+spring:
+  config:
+    activate:
+      on-profile: test
+
+aws:
+  s3:
+    endpoint: http://localhost:4566  # LocalStack for tests
+    access-key: test
+    secret-key: test
+    path-style-access: true
+
+---
+# Production Profile
+spring:
+  config:
+    activate:
+      on-profile: production
+
+logging:
+  level:
+    com.queryanalyzer: WARN
+    org.springframework.modulith: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%X{traceId}] %-5level %logger{36} - %msg%n"

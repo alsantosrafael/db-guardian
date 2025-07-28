@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  # PostgreSQL for local development
+  postgres:
+    image: postgres:15
+    container_name: queryanalyzer-postgres
+    environment:
+      POSTGRES_DB: queryanalyzer
+      POSTGRES_USER: queryanalyzer
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U queryanalyzer"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # LocalStack for S3 simulation
+  localstack:
+    image: localstack/localstack:3.0
+    container_name: queryanalyzer-localstack
+    ports:
+      - "4566:4566"
+    environment:
+      - SERVICES=s3
+      - DEBUG=1
+      - LS_LOG=warn
+      - PERSISTENCE=1
+      - AWS_DEFAULT_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+    volumes:
+      - "localstack_data:/var/lib/localstack"
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+
+  # Ollama for local LLM (alternative to OpenAI)
+  ollama:
+    image: ollama/ollama:latest
+    container_name: queryanalyzer-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+volumes:
+  postgres_data:
+  ollama_data:
+  localstack_data:

@@ -1,0 +1,38 @@
+# Gradle
+.gradle/
+build/
+gradle-app.setting
+gradle-wrapper.jar
+gradle-wrapper.properties
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Runtime
+tmp/
+/tmp/
+
+# Environment (discouraged - use application.yml profiles instead)
+.env
+.env.local
+.env.*.local
+
+# Application-specific
+/reports/
+*.pid
+
+# Test outputs
+*.hprof
+local-reports
