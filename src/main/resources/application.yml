@@ -47,6 +47,9 @@ aws:
 
 # Application Configuration
 app:
+  internal:
+    token: ${APP_INTERNAL_TOKEN:abacaxi}
+  
   reports:
     s3:
       bucket: ${REPORTS_S3_BUCKET:query-analyzer-reports}
