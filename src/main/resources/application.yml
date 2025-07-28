@@ -10,6 +10,12 @@ spring:
     password: ${DB_PASSWORD:password}
     driver-class-name: org.postgresql.Driver
   
+  logging:
+  level:
+    SECURITY_AUDIT: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%X{traceId}] %-5level %logger{36} - %msg%n"
+ 
   jpa:
     hibernate:
       ddl-auto: validate

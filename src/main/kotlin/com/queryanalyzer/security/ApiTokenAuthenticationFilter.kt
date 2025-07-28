@@ -8,6 +8,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.stereotype.Component
 import org.springframework.web.filter.OncePerRequestFilter
+import java.security.MessageDigest
 
 @Component
 class ApiTokenAuthenticationFilter(
@@ -21,7 +22,7 @@ class ApiTokenAuthenticationFilter(
     ) {
         val token = request.getHeader("x-api-token")
         
-        if (token != null && token.isNotEmpty() && token == validToken) {
+        if (token != null && token.isNotEmpty() && isValidToken(token)) {
             val authentication = UsernamePasswordAuthenticationToken(
                 "api-client", 
                 null, 
@@ -30,5 +31,16 @@ class ApiTokenAuthenticationFilter(
             SecurityContextHolder.getContext().authentication = authentication
         }
         filterChain.doFilter(request, response)
+    }
+    
+    private fun isValidToken(providedToken: String): Boolean {
+        if (validToken.isEmpty()) {
+            return false
+        }
+        
+        val providedBytes = providedToken.toByteArray(Charsets.UTF_8)
+        val validBytes = validToken.toByteArray(Charsets.UTF_8)
+        
+        return MessageDigest.isEqual(providedBytes, validBytes)
     }
 }
