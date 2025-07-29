@@ -57,9 +57,14 @@ app:
     token: ${APP_INTERNAL_TOKEN:abacaxi}
   
   reports:
+    storage:
+      type: ${REPORTS_STORAGE_TYPE:local}
     s3:
       bucket: ${REPORTS_S3_BUCKET:query-analyzer-reports}
       prefix: ${REPORTS_S3_PREFIX:reports/}
+    local:
+      directory: ${REPORTS_LOCAL_DIRECTORY:./reports}
+      base-url: ${REPORTS_LOCAL_BASE_URL:file://}
   
   openai:
     api-key: ${OPENAI_API_KEY:}
@@ -96,6 +101,9 @@ aws:
     path-style-access: true
 
 app:
+  reports:
+    storage:
+      type: s3  # Use S3 in local development (LocalStack)
   analysis:
     use-local-llm: true
 
@@ -124,6 +132,11 @@ spring:
     activate:
       on-profile: test
 
+app:
+  reports:
+    storage:
+      type: local  # Use local storage for tests
+
 aws:
   s3:
     endpoint: http://localhost:4566  # LocalStack for tests
@@ -137,6 +150,11 @@ spring:
   config:
     activate:
       on-profile: production
+
+app:
+  reports:
+    storage:
+      type: s3  # Use S3 in production
 
 logging:
   level:

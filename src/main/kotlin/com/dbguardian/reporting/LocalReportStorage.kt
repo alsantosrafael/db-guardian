@@ -1,53 +1,69 @@
 package com.dbguardian.reporting
 
 import org.springframework.beans.factory.annotation.Value
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.stereotype.Service
-import software.amazon.awssdk.core.sync.RequestBody
-import software.amazon.awssdk.services.s3.S3Client
-import software.amazon.awssdk.services.s3.model.GetObjectRequest
-import software.amazon.awssdk.services.s3.model.PutObjectRequest
-import software.amazon.awssdk.services.s3.presigner.S3Presigner
-import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest
-import java.time.Duration
+import java.io.File
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
 @Service
-@ConditionalOnProperty(name = ["app.reports.storage.type"], havingValue = "s3")
-class S3ReportStorage(
-    private val s3Client: S3Client,
-    private val s3Presigner: S3Presigner,
-    @Value("\${app.reports.s3.bucket}") private val bucketName: String,
-    @Value("\${app.reports.s3.prefix:reports/}") private val keyPrefix: String
+class LocalReportStorage(
+    @Value("\${app.reports.local.directory:./reports}") private val reportsDirectory: String,
+    @Value("\${app.reports.local.base-url:file://}") private val baseUrl: String
 ) : ReportStorage {
+    
+    init {
+        // Ensure reports directory exists
+        File(reportsDirectory).mkdirs()
+    }
     
     override fun storeReport(report: AnalysisReport): ReportLocation {
         val timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy/MM/dd"))
-        val key = "${keyPrefix}${timestamp}/${report.runId}.json"
+        val relativePath = "$timestamp/${report.runId}.json"
+        val filePath = "$reportsDirectory/$relativePath"
         
         val reportContent = formatReportAsJson(report)
         
-        val putRequest = PutObjectRequest.builder()
-            .bucket(bucketName)
-            .key(key)
-            .contentType("application/json")
-            .metadata(mapOf(
-                "run-id" to report.runId.toString(),
-                "mode" to report.mode,
-                "total-issues" to report.summary.totalIssues.toString(),
-                "critical-issues" to report.summary.criticalIssues.toString()
-            ))
-            .build()
+        // Ensure directory exists
+        File(filePath).parentFile.mkdirs()
         
-        s3Client.putObject(putRequest, RequestBody.fromString(reportContent))
+        // Write file
+        File(filePath).writeText(reportContent)
         
         return ReportLocation(
-            type = "s3",
-            bucket = bucketName,
-            key = key,
-            filePath = null
+            type = "local",
+            bucket = null,
+            key = null,
+            filePath = filePath
         )
+    }
+    
+    override fun storeMarkdownReport(report: AnalysisReport): ReportLocation {
+        val timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy/MM/dd"))
+        val relativePath = "$timestamp/${report.runId}.md" 
+        val filePath = "$reportsDirectory/$relativePath"
+        
+        val markdownContent = formatReportAsMarkdown(report)
+        
+        // Ensure directory exists
+        File(filePath).parentFile.mkdirs()
+        
+        // Write file
+        File(filePath).writeText(markdownContent)
+        
+        return ReportLocation(
+            type = "local",
+            bucket = null,
+            key = null,
+            filePath = filePath
+        )
+    }
+    
+    override fun generateAccessUrl(location: ReportLocation, expirationMinutes: Long): String {
+        return when (location.type) {
+            "local" -> "$baseUrl${location.filePath}"
+            else -> throw IllegalArgumentException("Unsupported location type: ${location.type}")
+        }
     }
     
     private fun formatReportAsJson(report: AnalysisReport): String {
@@ -93,34 +109,6 @@ class S3ReportStorage(
             $locationJson
             "confidence": ${issue.confidence}
         }""".trimIndent()
-    }
-    
-    override fun storeMarkdownReport(report: AnalysisReport): ReportLocation {
-        val timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy/MM/dd"))
-        val key = "${keyPrefix}${timestamp}/${report.runId}.md"
-        
-        val markdownContent = formatReportAsMarkdown(report)
-        
-        val putRequest = PutObjectRequest.builder()
-            .bucket(bucketName)
-            .key(key)
-            .contentType("text/markdown")
-            .metadata(mapOf(
-                "run-id" to report.runId.toString(),
-                "format" to "markdown",
-                "total-issues" to report.summary.totalIssues.toString(),
-                "critical-issues" to report.summary.criticalIssues.toString()
-            ))
-            .build()
-        
-        s3Client.putObject(putRequest, RequestBody.fromString(markdownContent))
-        
-        return ReportLocation(
-            type = "s3",
-            bucket = bucketName,
-            key = key,
-            filePath = null
-        )
     }
     
     private fun formatReportAsMarkdown(report: AnalysisReport): String {
@@ -171,7 +159,7 @@ class S3ReportStorage(
         
         // Footer
         builder.appendLine("---")
-        builder.appendLine("*Report generated by Query Analyzer RAG System*")
+        builder.appendLine("*Report generated by Database Guardian*")
         
         return builder.toString()
     }
@@ -236,26 +224,4 @@ class S3ReportStorage(
         "INFO" -> "ℹ️"
         else -> "❓"
     }
-    
-    override fun generateAccessUrl(location: ReportLocation, expirationMinutes: Long): String {
-        return when (location.type) {
-            "s3" -> generatePresignedUrl(location.bucket!!, location.key!!, expirationMinutes)
-            else -> throw IllegalArgumentException("Unsupported location type: ${location.type}")
-        }
-    }
-    
-    private fun generatePresignedUrl(bucket: String, key: String, expirationMinutes: Long = 15): String {
-        val getObjectRequest = GetObjectRequest.builder()
-            .bucket(bucket)
-            .key(key)
-            .build()
-        
-        val presignRequest = GetObjectPresignRequest.builder()
-            .signatureDuration(Duration.ofMinutes(expirationMinutes))
-            .getObjectRequest(getObjectRequest)
-            .build()
-        
-        return s3Presigner.presignGetObject(presignRequest).url().toString()
-    }
 }
-

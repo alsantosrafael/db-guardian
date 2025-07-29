@@ -3,6 +3,8 @@ package com.dbguardian.reporting
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.context.annotation.Primary
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials
 import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider
@@ -16,6 +18,21 @@ import java.net.URI
 class S3Configuration {
     
     @Bean
+    @Primary
+    fun reportStorage(
+        @Value("\${app.reports.storage.type:local}") storageType: String,
+        localReportStorage: LocalReportStorage,
+        s3ReportStorage: S3ReportStorage?
+    ): ReportStorage {
+        return when (storageType.lowercase()) {
+            "s3" -> s3ReportStorage ?: throw IllegalStateException("S3 storage requested but S3ReportStorage bean not available")
+            "local" -> localReportStorage
+            else -> localReportStorage // default to local
+        }
+    }
+    
+    @Bean
+    @ConditionalOnProperty(name = ["app.reports.storage.type"], havingValue = "s3")
     fun s3Client(
         @Value("\${aws.s3.endpoint:}") endpoint: String,
         @Value("\${aws.region:us-east-1}") region: String,
@@ -52,6 +69,7 @@ class S3Configuration {
     }
     
     @Bean
+    @ConditionalOnProperty(name = ["app.reports.storage.type"], havingValue = "s3")
     fun s3Presigner(
         @Value("\${aws.s3.endpoint:}") endpoint: String,
         @Value("\${aws.region:us-east-1}") region: String,
