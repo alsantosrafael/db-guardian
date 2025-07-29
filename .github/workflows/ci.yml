@@ -1,98 +1,134 @@
-name: Release new version
-env:
-  PROJECT_NAME: query-analyzer
+name: CI/CD Pipeline
+
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
+env:
+  JAVA_VERSION: '21'
+
 jobs:
-  build-and-test:
+  test:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write # Allow creating tags
-      pages: write # Allow GitHub Pages deployment
-      id-token: write # Allow OIDC token
-      actions: read # Allow reading actions
     steps:
-      - name: Checkout private repository
+      - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0 # Fetch all history for versioning
-      - name: Setup JVM
+
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
-          java-version: '21'
+          java-version: ${{ env.JAVA_VERSION }}
           distribution: 'temurin'
-      - name: Cache Gradle
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-
 
       - name: Setup Gradle
         uses: gradle/gradle-build-action@v2
 
-      - name: Build Kotlin App
-        run: |
-          echo "🏗️Building application..."
-          ./gradlew build -x test
+      - name: Run tests
+        run: gradle test
 
-      - name: Run Tests
-        run: |
-          echo "🧪Starting tests..."
-          ./gradlew test --info
+      - name: Build application
+        run: gradle build -x test
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: build/reports/tests/
+
+  release:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/gradle-build-action@v2
+
       - name: Calculate next version
         id: semver
         run: |
           LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
-          echo "??Latest tag found: $LATEST_TAG"
+          echo "🏷️ Latest tag found: $LATEST_TAG"
           
           VERSION=${LATEST_TAG#v}
-          
           IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
           
-            COMMITS_SINCE_TAG=$(git log $LATEST_TAG..HEAD --pretty=%B)
-
-            if echo "$COMMITS_SINCE_TAG" | grep -qE "^(feat|feature)(\(.+\))?!:|^BREAKING CHANGE:"; then
-              MAJOR=$((MAJOR + 1))
-              MINOR=0
-              PATCH=0
-            elif echo "$COMMITS_SINCE_TAG" | grep -qE "^feat(\(.+\))?:"; then
-              MINOR=$((MINOR + 1))
-              PATCH=0
-            else
-              PATCH=$((PATCH + 1))
-            fi
+          COMMITS_SINCE_TAG=$(git log $LATEST_TAG..HEAD --pretty=%B)
+          
+          if echo "$COMMITS_SINCE_TAG" | grep -qE "^(feat|feature)(\(.+\))?!:|^BREAKING CHANGE:"; then
+            MAJOR=$((MAJOR + 1))
+            MINOR=0
+            PATCH=0
+            echo "📈 Major version bump detected"
+          elif echo "$COMMITS_SINCE_TAG" | grep -qE "^feat(\(.+\))?:|^feature(\(.+\))?:"; then
+            MINOR=$((MINOR + 1))
+            PATCH=0
+            echo "🚀 Minor version bump detected"
+          else
+            PATCH=$((PATCH + 1))
+            echo "🔧 Patch version bump detected"
+          fi
+          
           NEW_VERSION="$MAJOR.$MINOR.$PATCH"
           echo "📦 New version calculated: $NEW_VERSION"
           echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+
       - name: Update version in build.properties.kts
         run: |
-          sed -i 's/version=".*"/version="v${{ steps.semver.outputs.version }}"/' build.properties.kts
+          sed -i 's/extra\["version"\] = ".*"/extra["version"] = "v${{ steps.semver.outputs.version }}"/' build.properties.kts
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add build.properties.kts
           git commit -m "chore: bump version to v${{ steps.semver.outputs.version }}" || true
+
+      - name: Build release artifact
+        run: gradle build
+
       - name: Create and push tag
         run: |
           git tag -a "v${{ steps.semver.outputs.version }}" -m "Release version ${{ steps.semver.outputs.version }}"
           git push origin "v${{ steps.semver.outputs.version }}"
+
       - name: Create GitHub Release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: softprops/action-gh-release@v1
         with:
           tag_name: v${{ steps.semver.outputs.version }}
-          release_name: Release v${{ steps.semver.outputs.version }}
+          name: Release v${{ steps.semver.outputs.version }}
           body: |
             ## 🚀 Release v${{ steps.semver.outputs.version }}
-
-            ### Changes:
-            $(git log --pretty=format:"- %s" $LATEST_TAG..HEAD)
+            
+            ### 📋 Changes:
+            ${{ steps.changelog.outputs.changes }}
+          files: build/libs/*.jar
           draft: false
           prerelease: false
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          LATEST_TAG=$(git describe --tags --abbrev=0 HEAD~1 2>/dev/null || echo "")
+          if [ -n "$LATEST_TAG" ]; then
+            CHANGES=$(git log --pretty=format:"- %s" $LATEST_TAG..HEAD)
+          else
+            CHANGES=$(git log --pretty=format:"- %s")
+          fi
+          echo "changes<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
