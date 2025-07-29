@@ -70,45 +70,48 @@ jobs:
       - name: Calculate next version
         id: semver
         run: |
-          echo "🔍 Checking git status..."
-          git status --porcelain
+          echo "🔍 Listing existing tags..."
+          git tag -l || echo "No tags found"
           
-          echo "🔍 Fetching tags..."
-          git fetch --tags || echo "No tags to fetch"
-          
-          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null)
+          # Busca última tag local
+          LATEST_TAG=$(git tag -l | sort -V | tail -1)
           
           if [ -z "$LATEST_TAG" ]; then
-            echo "🏷️ No existing tags found, starting from v0.0.0"
+            echo "🏷️ No existing tags found, creating first release"
             MAJOR=0
             MINOR=0
             PATCH=1
             
-            echo "🔍 Analyzing all commits for first release..."
-            COMMITS_SINCE_TAG=$(git log --oneline | head -10 | cut -d' ' -f2-)
+            # Para primeira release, analisa último commit
+            LAST_COMMIT=$(git log -1 --pretty=format:"%s")
+            echo "🔍 Last commit: $LAST_COMMIT"
+            
+            if echo "$LAST_COMMIT" | grep -qE "^feat(\(.+\))?:"; then
+              MINOR=1
+              PATCH=0
+            fi
           else
             echo "🏷️ Latest tag found: $LATEST_TAG"
             VERSION=${LATEST_TAG#v}
             IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
             
-            echo "🔍 Analyzing commits since $LATEST_TAG..."
-            COMMITS_SINCE_TAG=$(git log $LATEST_TAG..HEAD --pretty=format:"%s")
-          fi
-          
-          if echo "$COMMITS_SINCE_TAG" | grep -qE "^(feat|feature)(\(.+\))?!:|^BREAKING CHANGE:"; then
-            MAJOR=$((MAJOR + 1))
-            MINOR=0
-            PATCH=0
-            echo "📈 Major version bump detected"
-          
-          elif echo "$COMMITS_SINCE_TAG" | grep -qE "^feat(\(.+\))?:|^feature(\(.+\))?:"; then
-            MINOR=$((MINOR + 1))
-            PATCH=0
-            echo "🚀 Minor version bump detected"
-          
-          else
-            PATCH=$((PATCH + 1))
-            echo "🔧 Patch version bump detected"
+            # Analisa commits desde a última tag
+            COMMITS_SINCE_TAG=$(git log $LATEST_TAG..HEAD --pretty=format:"%s" 2>/dev/null || git log -1 --pretty=format:"%s")
+            echo "🔍 Commits since $LATEST_TAG: $COMMITS_SINCE_TAG"
+            
+            if echo "$COMMITS_SINCE_TAG" | grep -qE "^(feat|feature)(\(.+\))?!:|^BREAKING CHANGE:"; then
+              MAJOR=$((MAJOR + 1))
+              MINOR=0
+              PATCH=0
+              echo "📈 Major version bump detected"
+            elif echo "$COMMITS_SINCE_TAG" | grep -qE "^feat(\(.+\))?:|^feature(\(.+\))?:"; then
+              MINOR=$((MINOR + 1))
+              PATCH=0
+              echo "🚀 Minor version bump detected"
+            else
+              PATCH=$((PATCH + 1))
+              echo "🔧 Patch version bump detected"
+            fi
           fi
           
           NEW_VERSION="$MAJOR.$MINOR.$PATCH"
