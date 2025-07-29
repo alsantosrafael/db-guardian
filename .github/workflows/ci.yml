@@ -13,6 +13,8 @@ env:
 jobs:
   test:
     runs-on: ubuntu-latest
+    outputs:
+      jar-name: ${{ steps.build.outputs.jar-name }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -26,11 +28,22 @@ jobs:
       - name: Setup Gradle
         uses: gradle/gradle-build-action@v2
 
-      - name: Run unit tests
+      - name: Run tests
         run: gradle test
 
       - name: Build application
-        run: gradle build -x test
+        id: build
+        run: |
+          gradle build -x test
+          JAR_NAME=$(ls build/libs/*.jar | head -1 | xargs basename)
+          echo "jar-name=$JAR_NAME" >> $GITHUB_OUTPUT
+
+      - name: Upload JAR artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: application-jar
+          path: build/libs/*.jar
+          retention-days: 1
 
       - name: Upload test results
         uses: actions/upload-artifact@v4
@@ -38,6 +51,7 @@ jobs:
         with:
           name: test-results
           path: build/reports/tests/
+          retention-days: 1
 
   release:
     needs: test
@@ -52,124 +66,66 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Configure Git
-        run: |
-          git config --global user.email "action@github.com"
-          git config --global user.name "GitHub Action"
-          git config --global --add safe.directory $PWD
-
-      - name: Setup Java
-        uses: actions/setup-java@v4
+      - name: Download JAR artifact
+        uses: actions/download-artifact@v4
         with:
-          java-version: ${{ env.JAVA_VERSION }}
-          distribution: 'temurin'
+          name: application-jar
+          path: build/libs/
 
-      - name: Setup Gradle
-        uses: gradle/gradle-build-action@v2
-
-      - name: Calculate next version
-        id: semver
+      - name: Calculate version and changelog
+        id: version
         run: |
-          echo "🔍 Listing existing tags..."
-          git tag -l || echo "No tags found"
+          git config user.email "action@github.com"
+          git config user.name "GitHub Action"
           
-          # Busca última tag local
+          # Semantic versioning
           LATEST_TAG=$(git tag -l | sort -V | tail -1)
-          
           if [ -z "$LATEST_TAG" ]; then
-            echo "🏷️ No existing tags found, creating first release"
-            MAJOR=0
-            MINOR=0
-            PATCH=1
-            
-            # Para primeira release, analisa último commit
-            LAST_COMMIT=$(git log -1 --pretty=format:"%s")
-            echo "🔍 Last commit: $LAST_COMMIT"
-            
-            if echo "$LAST_COMMIT" | grep -qE "^feat(\(.+\))?:"; then
-              MINOR=1
-              PATCH=0
-            fi
+            NEW_VERSION="0.0.1"
+            CHANGELOG=$(git log --pretty=format:"- %s")
           else
-            echo "🏷️ Latest tag found: $LATEST_TAG"
             VERSION=${LATEST_TAG#v}
             IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
             
-            # Analisa commits desde a última tag
-            COMMITS_SINCE_TAG=$(git log $LATEST_TAG..HEAD --pretty=format:"%s" 2>/dev/null || git log -1 --pretty=format:"%s")
-            echo "🔍 Commits since $LATEST_TAG: $COMMITS_SINCE_TAG"
-            
-            if echo "$COMMITS_SINCE_TAG" | grep -qE "^(feat|feature)(\(.+\))?!:|^BREAKING CHANGE:"; then
-              MAJOR=$((MAJOR + 1))
-              MINOR=0
-              PATCH=0
-              echo "📈 Major version bump detected"
-            elif echo "$COMMITS_SINCE_TAG" | grep -qE "^feat(\(.+\))?:|^feature(\(.+\))?:"; then
-              MINOR=$((MINOR + 1))
-              PATCH=0
-              echo "🚀 Minor version bump detected"
+            COMMITS=$(git log $LATEST_TAG..HEAD --pretty=format:"%s")
+            if echo "$COMMITS" | grep -qE "^feat.*!:|^BREAKING CHANGE:"; then
+              NEW_VERSION="$((MAJOR + 1)).0.0"
+            elif echo "$COMMITS" | grep -qE "^feat:"; then
+              NEW_VERSION="$MAJOR.$((MINOR + 1)).0"
             else
-              PATCH=$((PATCH + 1))
-              echo "🔧 Patch version bump detected"
+              NEW_VERSION="$MAJOR.$MINOR.$((PATCH + 1))"
             fi
+            
+            CHANGELOG=$(git log --pretty=format:"- %s" $LATEST_TAG..HEAD)
           fi
           
-          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
-          echo "📦 New version calculated: $NEW_VERSION"
           echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGELOG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Update version in build.gradle.kts
+      - name: Update version and create tag
         run: |
-          echo "📝 Updating version to ${{ steps.semver.outputs.version }}..."
-          sed -i 's/val appVersion = ".*"/val appVersion = "${{ steps.semver.outputs.version }}"/' build.gradle.kts
+          sed -i 's/val appVersion = ".*"/val appVersion = "${{ steps.version.outputs.version }}"/' build.gradle.kts
           
-          if git diff --quiet build.gradle.kts; then
-            echo "⚠️ No changes to commit"
-          else
+          if ! git diff --quiet build.gradle.kts; then
             git add build.gradle.kts
-            git commit -m "chore: bump version to ${{ steps.semver.outputs.version }}"
-            echo "✅ Version updated and committed"
+            git commit -m "chore: bump version to ${{ steps.version.outputs.version }}"
           fi
-
-      - name: Build release artifact
-        run: gradle build
-
-      - name: Create and push tag
-        run: |
-          git tag -a "v${{ steps.semver.outputs.version }}" -m "Release version ${{ steps.semver.outputs.version }}"
-          git push origin "v${{ steps.semver.outputs.version }}"
+          
+          git tag -a "v${{ steps.version.outputs.version }}" -m "Release ${{ steps.version.outputs.version }}"
+          git push origin "v${{ steps.version.outputs.version }}"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: v${{ steps.semver.outputs.version }}
-          name: Release v${{ steps.semver.outputs.version }}
+          tag_name: v${{ steps.version.outputs.version }}
+          name: Release v${{ steps.version.outputs.version }}
           body: |
-            ## 🚀 Release v${{ steps.semver.outputs.version }}
+            ## 🚀 Release v${{ steps.version.outputs.version }}
             
             ### 📋 Changes:
-            ${{ steps.changelog.outputs.changes }}
+            ${{ steps.version.outputs.changelog }}
           files: build/libs/*.jar
           draft: false
           prerelease: false
-
-      - name: Generate changelog
-        id: changelog
-        run: |
-          LAST_RELEASE_TAG=$(git tag -l | sort -V | tail -1)
-          
-          if [ -n "$LAST_RELEASE_TAG" ]; then
-            echo "📋 Generating changelog since last release: $LAST_RELEASE_TAG"
-            CHANGES=$(git log --pretty=format:"- %s" $LAST_RELEASE_TAG..HEAD 2>/dev/null)
-            
-            if [ -z "$CHANGES" ]; then
-              CHANGES="- No new commits since $LAST_RELEASE_TAG"
-            fi
-          else
-            echo "📋 Generating changelog for first release (all commits)"
-            CHANGES=$(git log --pretty=format:"- %s")
-          fi
-          
-          echo "changes<<EOF" >> $GITHUB_OUTPUT
-          echo "$CHANGES" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
