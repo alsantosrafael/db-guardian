@@ -1,4 +1,6 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+apply(from = "build.properties.kts")
+val buildVersion: String by extra
 
 plugins {
     id("org.springframework.boot") version "3.2.0"
@@ -9,7 +11,7 @@ plugins {
 }
 
 group = "com.queryanalyzer"
-version = "0.0.1-SNAPSHOT"
+version = buildVersion.removePrefix("v")
 
 java {
     sourceCompatibility = JavaVersion.VERSION_21

@@ -1,0 +1,94 @@
+name: Release new version
+env:
+  PROJECT_NAME: query-analyzer
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Allow creating tags
+      pages: write # Allow GitHub Pages deployment
+      id-token: write # Allow OIDC token
+      actions: read # Allow reading actions
+    steps:
+      - name: Checkout private repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Fetch all history for versioning
+      - name: Setup JVM
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Build Kotlin App
+        run: |
+          echo "??️Building application..."
+          ./gradlew build -x test
+      - name: Run Tests
+        run: |
+          echo "??Starting tests..."
+          ./gradlew test --info
+      - name: Calculate next version
+        id: semver
+        run: |
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          echo "??Latest tag found: $LATEST_TAG"
+          
+          VERSION=${LATEST_TAG#v}
+          
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+          
+            COMMITS_SINCE_TAG=$(git log $LATEST_TAG..HEAD --pretty=%B)
+
+            if echo "$COMMITS_SINCE_TAG" | grep -qE "^(feat|feature)(\(.+\))?!:|^BREAKING CHANGE:"; then
+              MAJOR=$((MAJOR + 1))
+              MINOR=0
+              PATCH=0
+            elif echo "$COMMITS_SINCE_TAG" | grep -qE "^feat(\(.+\))?:"; then
+              MINOR=$((MINOR + 1))
+              PATCH=0
+            else
+              PATCH=$((PATCH + 1))
+            fi
+          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+          echo "📦 New version calculated: $NEW_VERSION"
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+      - name: Update version in build.properties.kts
+        run: |
+          sed -i 's/version=".*"/version="v${{ steps.semver.outputs.version }}"/' build.properties.kts
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add build.properties.kts
+          git commit -m "chore: bump version to v${{ steps.semver.outputs.version }}" || true
+      - name: Create and push tag
+        run: |
+          git tag -a "v${{ steps.semver.outputs.version }}" -m "Release version ${{ steps.semver.outputs.version }}"
+          git push origin "v${{ steps.semver.outputs.version }}"
+      - name: Create GitHub Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ steps.semver.outputs.version }}
+          release_name: Release v${{ steps.semver.outputs.version }}
+          body: |
+            ## 🚀 Release v${{ steps.semver.outputs.version }}
+
+            ### Changes:
+            $(git log --pretty=format:"- %s" $LATEST_TAG..HEAD)
+          draft: false
+          prerelease: false
