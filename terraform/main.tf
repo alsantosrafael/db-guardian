@@ -49,6 +49,8 @@ resource "aws_s3_bucket_versioning" "reports" {
 
 # Automatic removal of files
 resource "aws_s3_bucket_lifecycle_configuration" "reports" {
+  bucket = aws_s3_bucket.reports.id
+
   rule {
     id     = "auto_cleanup"
     status = "Enabled"
