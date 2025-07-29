@@ -12,12 +12,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 
 @SpringBootTest
 @AutoConfigureMockMvc
-@TestPropertySource(properties = [
-    "app.internal.token=test-token-123",
-    "spring.flyway.enabled=false",
-    "spring.datasource.url=jdbc:h2:mem:testdb",
-    "spring.jpa.hibernate.ddl-auto=create-drop"
-])
+@TestPropertySource(locations = ["classpath:application-test.yml"])
 class SecurityConfigTest {
 
     @Autowired

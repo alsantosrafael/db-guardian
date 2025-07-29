@@ -15,12 +15,10 @@ import org.springframework.http.HttpStatus
 import org.springframework.test.context.TestPropertySource
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@TestPropertySource(properties = [
-    "app.internal.token=integration-test-token-456",
-    "spring.flyway.enabled=false",
-    "spring.datasource.url=jdbc:h2:mem:integrationtestdb",
-    "spring.jpa.hibernate.ddl-auto=create-drop"
-])
+@TestPropertySource(
+    locations = ["classpath:application-test.yml"],
+    properties = ["app.internal.token=integration-test-token-456"]
+)
 class ApiAuthenticationIntegrationTest {
 
     @LocalServerPort
