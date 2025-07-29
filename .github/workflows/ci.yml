@@ -64,23 +64,35 @@ jobs:
       - name: Calculate next version
         id: semver
         run: |
-          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
-          echo "🏷️ Latest tag found: $LATEST_TAG"
+
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null)
           
-          VERSION=${LATEST_TAG#v}
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
-          
-          COMMITS_SINCE_TAG=$(git log $LATEST_TAG..HEAD --pretty=%B)
+          if [ -z "$LATEST_TAG" ]; then
+            echo "🏷️ No existing tags found, starting from v0.0.0"
+            MAJOR=0
+            MINOR=0
+            PATCH=1
+
+            COMMITS_SINCE_TAG=$(git log --pretty=%B)
+          else
+            echo "🏷️ Latest tag found: $LATEST_TAG"
+            VERSION=${LATEST_TAG#v}
+            IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+  
+            COMMITS_SINCE_TAG=$(git log $LATEST_TAG..HEAD --pretty=%B)
+          fi
           
           if echo "$COMMITS_SINCE_TAG" | grep -qE "^(feat|feature)(\(.+\))?!:|^BREAKING CHANGE:"; then
             MAJOR=$((MAJOR + 1))
             MINOR=0
             PATCH=0
             echo "📈 Major version bump detected"
+          
           elif echo "$COMMITS_SINCE_TAG" | grep -qE "^feat(\(.+\))?:|^feature(\(.+\))?:"; then
             MINOR=$((MINOR + 1))
             PATCH=0
             echo "🚀 Minor version bump detected"
+          
           else
             PATCH=$((PATCH + 1))
             echo "🔧 Patch version bump detected"
@@ -123,12 +135,17 @@ jobs:
       - name: Generate changelog
         id: changelog
         run: |
-          LATEST_TAG=$(git describe --tags --abbrev=0 HEAD~1 2>/dev/null || echo "")
-          if [ -n "$LATEST_TAG" ]; then
-            CHANGES=$(git log --pretty=format:"- %s" $LATEST_TAG..HEAD)
+          # Busca a tag anterior (se existir)
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD~1 2>/dev/null)
+          
+          if [ -n "$PREV_TAG" ]; then
+            echo "📋 Generating changelog since $PREV_TAG"
+            CHANGES=$(git log --pretty=format:"- %s" $PREV_TAG..HEAD)
           else
-            CHANGES=$(git log --pretty=format:"- %s")
+            echo "📋 Generating changelog for all commits (first release)"
+            CHANGES=$(git log --pretty=format:"- %s" --max-count=10)
           fi
+          
           echo "changes<<EOF" >> $GITHUB_OUTPUT
           echo "$CHANGES" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
