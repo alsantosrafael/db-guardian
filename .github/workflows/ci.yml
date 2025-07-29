@@ -34,13 +34,17 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
+      - name: Setup Gradle
+        uses: gradle/gradle-build-action@v2
+
       - name: Build Kotlin App
         run: |
-          echo "??️Building application..."
+          echo "🏗️Building application..."
           ./gradlew build -x test
+
       - name: Run Tests
         run: |
-          echo "??Starting tests..."
+          echo "🧪Starting tests..."
           ./gradlew test --info
       - name: Calculate next version
         id: semver
