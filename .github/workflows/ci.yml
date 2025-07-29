@@ -156,15 +156,18 @@ jobs:
       - name: Generate changelog
         id: changelog
         run: |
-          # Busca a tag anterior (se existir)
-          PREV_TAG=$(git describe --tags --abbrev=0 HEAD~1 2>/dev/null)
+          LAST_RELEASE_TAG=$(git tag -l | sort -V | tail -1)
           
-          if [ -n "$PREV_TAG" ]; then
-            echo "📋 Generating changelog since $PREV_TAG"
-            CHANGES=$(git log --pretty=format:"- %s" $PREV_TAG..HEAD)
+          if [ -n "$LAST_RELEASE_TAG" ]; then
+            echo "📋 Generating changelog since last release: $LAST_RELEASE_TAG"
+            CHANGES=$(git log --pretty=format:"- %s" $LAST_RELEASE_TAG..HEAD 2>/dev/null)
+            
+            if [ -z "$CHANGES" ]; then
+              CHANGES="- No new commits since $LAST_RELEASE_TAG"
+            fi
           else
-            echo "📋 Generating changelog for all commits (first release)"
-            CHANGES=$(git log --pretty=format:"- %s" --max-count=10)
+            echo "📋 Generating changelog for first release (all commits)"
+            CHANGES=$(git log --pretty=format:"- %s")
           fi
           
           echo "changes<<EOF" >> $GITHUB_OUTPUT
