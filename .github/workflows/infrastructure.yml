@@ -1,0 +1,14 @@
+name: Deploy Infrastructure
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy_infra:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Provision Bucket
+        run: |
+          cd terraform
+          terraform init
+          terraform plan
+          terraform apply -auto-approve
