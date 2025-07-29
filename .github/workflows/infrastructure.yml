@@ -1,12 +1,6 @@
 name: Infrastructure Deployment
 
 on:
-  push:
-    branches: [main]
-    paths: ['terraform/**']
-  pull_request:
-    branches: [main] 
-    paths: ['terraform/**']
   workflow_dispatch:
     inputs:
       action:
@@ -94,12 +88,9 @@ jobs:
             });
 
       - name: Terraform Apply
-        if: |
-          github.ref == 'refs/heads/main' && 
-          github.event_name == 'push' ||
-          (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply')
+        if: github.event.inputs.action == 'apply'
         run: terraform apply -auto-approve tfplan
 
       - name: Terraform Destroy
-        if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'destroy'
+        if: github.event.inputs.action == 'destroy'
         run: terraform destroy -auto-approve
