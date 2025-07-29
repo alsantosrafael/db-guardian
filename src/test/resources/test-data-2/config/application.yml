@@ -1,0 +1,75 @@
+spring:
+  datasource:
+    # GOOD: Properly configured connection pool
+    url: jdbc:postgresql://localhost:5432/testdb
+    username: ${DB_USERNAME:testuser}
+    password: ${DB_PASSWORD:testpass}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        # GOOD: Proper batch sizing
+        jdbc:
+          batch_size: 25
+          order_inserts: true
+          order_updates: true
+        # GOOD: Query optimization settings
+        format_sql: true
+        use_sql_comments: true
+        show_sql: false
+        
+    # BAD: N+1 query detection disabled
+    show-sql: false
+    
+  # Configuration with potential SQL injection risks
+  custom:
+    queries:
+      # BAD: Dynamic SQL in configuration
+      user-search: "SELECT * FROM users WHERE name = '%s'"
+      product-filter: "SELECT * FROM products WHERE %s"
+      
+    # GOOD: Parameterized queries in config
+    safe-queries:
+      find-user: "SELECT id, name, email FROM users WHERE id = :userId"
+      find-products: "SELECT id, name, price FROM products WHERE category_id = :categoryId"
+
+logging:
+  level:
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+    
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+        
+# Custom application properties with SQL
+app:
+  reports:
+    # BAD: Hardcoded SQL with potential injection
+    daily-summary: >
+      SELECT DATE(created_at) as date, 
+             COUNT(*) as total_products,
+             AVG(price) as avg_price
+      FROM products 
+      WHERE created_at >= '%s' 
+      GROUP BY DATE(created_at)
+      
+    # GOOD: Parameterized report query
+    monthly-summary: >
+      SELECT DATE_TRUNC('month', created_at) as month,
+             COUNT(*) as total_products,
+             AVG(price) as avg_price
+      FROM products 
+      WHERE created_at >= :start_date
+      GROUP BY DATE_TRUNC('month', created_at)
+      ORDER BY month DESC
