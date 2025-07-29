@@ -27,11 +27,7 @@ jobs:
         uses: gradle/gradle-build-action@v2
 
       - name: Run unit tests
-        run: gradle test --tests "*Test" --exclude-tests "*IntegrationTest" --exclude-tests "*SecurityConfigTest"
-        
-#      - name: Run integration tests
-#        run: gradle test --tests "*IntegrationTest" --tests "*SecurityConfigTest" || echo "⚠️ Integration tests failed but continuing build"
-#        continue-on-error: true
+        run: gradle test
 
       - name: Build application
         run: gradle build -x test

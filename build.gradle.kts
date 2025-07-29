@@ -75,4 +75,19 @@ tasks.withType<KotlinCompile> {
 
 tasks.withType<Test> {
     useJUnitPlatform()
+    
+    // Exclude integration tests from default test task
+    exclude("**/integration/**")
+    exclude("**/security/SecurityConfigTest.class")
+}
+
+// Create separate task for integration tests
+tasks.register<Test>("integrationTest") {
+    useJUnitPlatform()
+    testClassesDirs = sourceSets["test"].output.classesDirs
+    classpath = sourceSets["test"].runtimeClasspath
+    
+    // Only run integration tests
+    include("**/integration/**")
+    include("**/security/SecurityConfigTest.class")
 }
