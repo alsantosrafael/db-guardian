@@ -90,13 +90,13 @@ jobs:
           echo "📦 New version calculated: $NEW_VERSION"
           echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
 
-      - name: Update version in build.properties.kts
+      - name: Update version in build.gradle.kts
         run: |
-          sed -i 's/extra\["version"\] = ".*"/extra["version"] = "v${{ steps.semver.outputs.version }}"/' build.properties.kts
+          sed -i 's/val appVersion = ".*"/val appVersion = "${{ steps.semver.outputs.version }}"/' build.gradle.kts
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git add build.properties.kts
-          git commit -m "chore: bump version to v${{ steps.semver.outputs.version }}" || true
+          git add build.gradle.kts
+          git commit -m "chore: bump version to ${{ steps.semver.outputs.version }}" || true
 
       - name: Build release artifact
         run: gradle build
