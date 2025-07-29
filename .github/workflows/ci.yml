@@ -52,6 +52,12 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Configure Git
+        run: |
+          git config --global user.email "action@github.com"
+          git config --global user.name "GitHub Action"
+          git config --global --add safe.directory $PWD
+
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
@@ -64,7 +70,12 @@ jobs:
       - name: Calculate next version
         id: semver
         run: |
-
+          echo "🔍 Checking git status..."
+          git status --porcelain
+          
+          echo "🔍 Fetching tags..."
+          git fetch --tags || echo "No tags to fetch"
+          
           LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null)
           
           if [ -z "$LATEST_TAG" ]; then
@@ -72,14 +83,16 @@ jobs:
             MAJOR=0
             MINOR=0
             PATCH=1
-
-            COMMITS_SINCE_TAG=$(git log --pretty=%B)
+            
+            echo "🔍 Analyzing all commits for first release..."
+            COMMITS_SINCE_TAG=$(git log --oneline | head -10 | cut -d' ' -f2-)
           else
             echo "🏷️ Latest tag found: $LATEST_TAG"
             VERSION=${LATEST_TAG#v}
             IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
-  
-            COMMITS_SINCE_TAG=$(git log $LATEST_TAG..HEAD --pretty=%B)
+            
+            echo "🔍 Analyzing commits since $LATEST_TAG..."
+            COMMITS_SINCE_TAG=$(git log $LATEST_TAG..HEAD --pretty=format:"%s")
           fi
           
           if echo "$COMMITS_SINCE_TAG" | grep -qE "^(feat|feature)(\(.+\))?!:|^BREAKING CHANGE:"; then
@@ -104,11 +117,16 @@ jobs:
 
       - name: Update version in build.gradle.kts
         run: |
+          echo "📝 Updating version to ${{ steps.semver.outputs.version }}..."
           sed -i 's/val appVersion = ".*"/val appVersion = "${{ steps.semver.outputs.version }}"/' build.gradle.kts
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git add build.gradle.kts
-          git commit -m "chore: bump version to ${{ steps.semver.outputs.version }}" || true
+          
+          if git diff --quiet build.gradle.kts; then
+            echo "⚠️ No changes to commit"
+          else
+            git add build.gradle.kts
+            git commit -m "chore: bump version to ${{ steps.semver.outputs.version }}"
+            echo "✅ Version updated and committed"
+          fi
 
       - name: Build release artifact
         run: gradle build
