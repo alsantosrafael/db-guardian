@@ -32,9 +32,11 @@ ANALYSIS_RESPONSE=$(curl -s -X POST http://localhost:8080/api/analyze \
   -H "Content-Type: application/json" \
   -d '{
     "mode": "static",
-    "source": "src/test/resources/test-data-2",
+    "source": "./src/main/kotlin",
     "config": {
-      "dialect": "postgresql"
+      "dialect": "postgresql",
+      "migrationPaths": ["./src/main/resources/db/migration"],
+      "codePath": "./src/main/kotlin"
     }
   }')
 
