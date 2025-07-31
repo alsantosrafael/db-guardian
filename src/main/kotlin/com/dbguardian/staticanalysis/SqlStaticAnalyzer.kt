@@ -53,49 +53,9 @@ class SqlStaticAnalyzer(
     private fun generateBasicReport(runId: UUID, queries: List<Pair<ParsedQuery, String>>): AnalysisReport {
         val issues = mutableListOf<ReportIssue>()
         
-        // Basic SQL analysis without RAG - just count and categorize queries
+        // Advanced SQL pattern analysis
         queries.forEach { (parsedQuery, filePath) ->
-            // Simple heuristics for demo purposes
-            val queryText = parsedQuery.originalSql.uppercase()
-            
-            when {
-                queryText.contains("SELECT *") -> {
-                    issues.add(ReportIssue(
-                        id = UUID.randomUUID(),
-                        severity = "WARNING",
-                        technique = "AVOID_SELECT_STAR",
-                        description = "Using SELECT * can lead to performance issues",
-                        suggestion = "Replace SELECT * with explicit column names",
-                        queryText = parsedQuery.originalSql,
-                        location = IssueLocation(filePath, 1, 1, null),
-                        confidence = 0.9
-                    ))
-                }
-                queryText.contains("UPDATE") && !queryText.contains("WHERE") -> {
-                    issues.add(ReportIssue(
-                        id = UUID.randomUUID(),
-                        severity = "CRITICAL",
-                        technique = "REQUIRE_WHERE_CLAUSE",
-                        description = "UPDATE without WHERE clause can modify all rows",
-                        suggestion = "Add WHERE clause to UPDATE statement",
-                        queryText = parsedQuery.originalSql,
-                        location = IssueLocation(filePath, 1, 1, null),
-                        confidence = 1.0
-                    ))
-                }
-                queryText.contains("DELETE") && !queryText.contains("WHERE") -> {
-                    issues.add(ReportIssue(
-                        id = UUID.randomUUID(),
-                        severity = "CRITICAL",
-                        technique = "REQUIRE_WHERE_CLAUSE",
-                        description = "DELETE without WHERE clause can remove all rows",
-                        suggestion = "Add WHERE clause to DELETE statement",
-                        queryText = parsedQuery.originalSql,
-                        location = IssueLocation(filePath, 1, 1, null),
-                        confidence = 1.0
-                    ))
-                }
-            }
+            issues.addAll(detectAdvancedPatterns(parsedQuery, filePath))
         }
         
         val summary = ReportSummary(
@@ -198,6 +158,12 @@ class SqlStaticAnalyzer(
         
         try {
             val content = file.readText()
+            
+            // Check for JPA/Hibernate patterns first (these create "virtual" queries)
+            if (file.extension.lowercase() in setOf("kt", "java", "scala", "groovy")) {
+                queries.addAll(extractJpaPatterns(content, file.absolutePath))
+            }
+            
             val sqlStrings = when (file.extension.lowercase()) {
                 in setOf("sql", "ddl", "dml", "pgsql", "mysql", "psql") -> {
                     extractFromSqlFile(content)
@@ -223,6 +189,81 @@ class SqlStaticAnalyzer(
         }
         
         return queries
+    }
+    
+    private fun extractJpaPatterns(content: String, filePath: String): List<ParsedQuery> {
+        val virtualQueries = mutableListOf<ParsedQuery>()
+        
+        try {
+            // N+1 Query Detection - @OneToMany without fetch strategy
+            val oneToManyPattern = Regex("@OneToMany(?!.*fetch\\s*=\\s*FetchType\\.EAGER)(?!.*@BatchSize)", 
+                setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+            
+            oneToManyPattern.findAll(content).forEach { match ->
+                val contextCode = getContextAroundMatch(content, match.range)
+                // Create a virtual SELECT statement that can be analyzed
+                val virtualSql = "JPA_N_PLUS_ONE_RISK: $contextCode"
+                val parsedStatement = sqlParser.parseQuery("SELECT 1 as virtual_query")
+                if (parsedStatement != null) {
+                    virtualQueries.add(ParsedQuery(
+                        originalSql = virtualSql,
+                        statement = parsedStatement.statement,
+                        isSelect = true
+                    ))
+                }
+            }
+            
+            // Lazy loading issues in repositories
+            val findAllPattern = Regex("fun\\s+findAll\\s*\\(\\s*\\)\\s*:", RegexOption.IGNORE_CASE)
+            if (findAllPattern.containsMatchIn(content) && content.contains("@OneToMany")) {
+                findAllPattern.findAll(content).forEach { match ->
+                    val contextCode = getContextAroundMatch(content, match.range)
+                    val virtualSql = "JPA_FIND_ALL_WITH_COLLECTIONS: $contextCode"
+                    val parsedStatement = sqlParser.parseQuery("SELECT 1 as virtual_query")
+                    if (parsedStatement != null) {
+                        virtualQueries.add(ParsedQuery(
+                            originalSql = virtualSql,
+                            statement = parsedStatement.statement,
+                            isSelect = true
+                        ))
+                    }
+                }
+            }
+            
+            // @Query without JOIN FETCH
+            val queryPattern = Regex("@Query\\s*\\(\\s*[\"']([^\"']*SELECT[^\"']*)[\"']", RegexOption.IGNORE_CASE)
+            queryPattern.findAll(content).forEach { match ->
+                val query = match.groupValues[1].uppercase()
+                if (query.contains("JOIN") && !query.contains("JOIN FETCH") && !query.contains("FETCH")) {
+                    val virtualSql = "JPA_MISSING_JOIN_FETCH: ${match.groupValues[1]}"
+                    val parsedStatement = sqlParser.parseQuery("SELECT 1 as virtual_query")
+                    if (parsedStatement != null) {
+                        virtualQueries.add(ParsedQuery(
+                            originalSql = virtualSql,
+                            statement = parsedStatement.statement,
+                            isSelect = true
+                        ))
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            println("⚠️ Error extracting JPA patterns from ${filePath}: ${e.message}")
+        }
+        
+        return virtualQueries
+    }
+    
+    private fun getContextAroundMatch(content: String, range: IntRange, contextLines: Int = 2): String {
+        val lines = content.lines()
+        val startLine = getLineNumber(content, range.first) - 1
+        val start = maxOf(0, startLine - contextLines)
+        val end = minOf(lines.size, startLine + contextLines + 1)
+        
+        return lines.subList(start, end).joinToString("\n")
+    }
+    
+    private fun getLineNumber(content: String, position: Int): Int {
+        return content.substring(0, position).count { it == '\n' } + 1
     }
     
     private fun extractFromSqlFile(content: String): List<Pair<String, Int>> {
@@ -335,5 +376,268 @@ class SqlStaticAnalyzer(
         val sqlKeywords = setOf("SELECT", "INSERT", "UPDATE", "DELETE", "CREATE", "ALTER", "DROP", "TRUNCATE")
         val upperText = text.uppercase()
         return sqlKeywords.any { keyword -> upperText.contains(keyword) }
+    }
+    
+    private fun detectAdvancedPatterns(parsedQuery: ParsedQuery, filePath: String): List<ReportIssue> {
+        val issues = mutableListOf<ReportIssue>()
+        val queryText = parsedQuery.originalSql.uppercase()
+        val originalQuery = parsedQuery.originalSql
+        
+        // JPA/Hibernate specific patterns
+        if (originalQuery.startsWith("JPA_")) {
+            issues.addAll(detectJpaPatterns(originalQuery, filePath))
+        } else {
+            // Regular SQL patterns
+            issues.addAll(detectBasicSqlPatterns(queryText, originalQuery, filePath))
+            issues.addAll(detectPerformanceIssues(queryText, originalQuery, filePath))
+            issues.addAll(detectJoinIssues(queryText, originalQuery, filePath))
+            issues.addAll(detectIndexIssues(queryText, originalQuery, filePath))
+        }
+        
+        return issues
+    }
+    
+    private fun detectJpaPatterns(originalQuery: String, filePath: String): List<ReportIssue> {
+        val issues = mutableListOf<ReportIssue>()
+        
+        when {
+            originalQuery.startsWith("JPA_N_PLUS_ONE_RISK:") -> {
+                issues.add(createIssue(
+                    severity = "CRITICAL",
+                    technique = "N_PLUS_ONE_QUERY_RISK",
+                    description = "@OneToMany relationship without explicit fetch strategy may cause N+1 queries",
+                    suggestion = "Add fetch = FetchType.EAGER, @BatchSize annotation, or use @Query with JOIN FETCH",
+                    queryText = originalQuery.substringAfter(":").trim(),
+                    filePath = filePath,
+                    confidence = 0.8
+                ))
+            }
+            originalQuery.startsWith("JPA_FIND_ALL_WITH_COLLECTIONS:") -> {
+                issues.add(createIssue(
+                    severity = "WARNING", 
+                    technique = "FIND_ALL_WITH_COLLECTIONS",
+                    description = "findAll() on entities with @OneToMany collections may cause performance issues",
+                    suggestion = "Use custom @Query with JOIN FETCH or implement pagination",
+                    queryText = originalQuery.substringAfter(":").trim(),
+                    filePath = filePath,
+                    confidence = 0.7
+                ))
+            }
+            originalQuery.startsWith("JPA_MISSING_JOIN_FETCH:") -> {
+                issues.add(createIssue(
+                    severity = "INFO",
+                    technique = "MISSING_JOIN_FETCH",
+                    description = "@Query with JOIN but no FETCH may not initialize relationships properly",  
+                    suggestion = "Consider using JOIN FETCH to eagerly load related entities",
+                    queryText = originalQuery.substringAfter(":").trim(),
+                    filePath = filePath,
+                    confidence = 0.6
+                ))
+            }
+        }
+        
+        return issues
+    }
+    
+    private fun detectBasicSqlPatterns(queryText: String, originalQuery: String, filePath: String): List<ReportIssue> {
+        val issues = mutableListOf<ReportIssue>()
+        
+        // SELECT * detection
+        if (queryText.contains("SELECT *")) {
+            issues.add(createIssue(
+                severity = "WARNING",
+                technique = "AVOID_SELECT_STAR",
+                description = "Using SELECT * can lead to performance issues and breaks when schema changes",
+                suggestion = "Replace SELECT * with explicit column names",
+                queryText = originalQuery,
+                filePath = filePath,
+                confidence = 0.9
+            ))
+        }
+        
+        // Missing WHERE clause in UPDATE/DELETE
+        if (queryText.contains("UPDATE") && !queryText.contains("WHERE")) {
+            issues.add(createIssue(
+                severity = "CRITICAL",
+                technique = "REQUIRE_WHERE_CLAUSE",
+                description = "UPDATE without WHERE clause can modify all rows",
+                suggestion = "Add WHERE clause to UPDATE statement",
+                queryText = originalQuery,
+                filePath = filePath,
+                confidence = 1.0
+            ))
+        }
+        
+        if (queryText.contains("DELETE") && !queryText.contains("WHERE")) {
+            issues.add(createIssue(
+                severity = "CRITICAL",
+                technique = "REQUIRE_WHERE_CLAUSE",
+                description = "DELETE without WHERE clause can remove all rows",
+                suggestion = "Add WHERE clause to DELETE statement",
+                queryText = originalQuery,
+                filePath = filePath,
+                confidence = 1.0
+            ))
+        }
+        
+        return issues
+    }
+    
+    private fun detectPerformanceIssues(queryText: String, originalQuery: String, filePath: String): List<ReportIssue> {
+        val issues = mutableListOf<ReportIssue>()
+        
+        // COUNT(*) without LIMIT on potentially large tables
+        if (queryText.contains("COUNT(*)") && !queryText.contains("LIMIT")) {
+            issues.add(createIssue(
+                severity = "WARNING",
+                technique = "COUNT_WITHOUT_LIMIT",
+                description = "COUNT(*) on large tables can be expensive",
+                suggestion = "Consider using COUNT(*) with LIMIT or approximate counting for large datasets",
+                queryText = originalQuery,
+                filePath = filePath,
+                confidence = 0.7
+            ))
+        }
+        
+        // LIKE patterns starting with %
+        val likeWildcardPattern = Regex("LIKE\\s+['\"]%[^'\"]*['\"]", RegexOption.IGNORE_CASE)
+        if (likeWildcardPattern.containsMatchIn(queryText)) {
+            issues.add(createIssue(
+                severity = "WARNING",
+                technique = "INEFFICIENT_LIKE_PATTERN",
+                description = "LIKE patterns starting with % cannot use indexes efficiently",
+                suggestion = "Consider full-text search or restructuring the query to avoid leading wildcards",
+                queryText = originalQuery,
+                filePath = filePath,
+                confidence = 0.9
+            ))
+        }
+        
+        // Multiple OR conditions that could be IN
+        if (queryText.count { it.toString().uppercase() == "OR" } >= 3) {
+            val orPattern = Regex("\\w+\\s*=\\s*[^\\s]+\\s+OR\\s+\\w+\\s*=", RegexOption.IGNORE_CASE)
+            if (orPattern.containsMatchIn(queryText)) {
+                issues.add(createIssue(
+                    severity = "INFO",
+                    technique = "MULTIPLE_OR_CONDITIONS",
+                    description = "Multiple OR conditions on the same column can often be optimized",
+                    suggestion = "Consider using IN clause instead of multiple OR conditions",
+                    queryText = originalQuery,
+                    filePath = filePath,
+                    confidence = 0.6
+                ))
+            }
+        }
+        
+        // ORDER BY without LIMIT (potential performance issue)
+        if (queryText.contains("ORDER BY") && !queryText.contains("LIMIT") && !queryText.contains("WHERE")) {
+            issues.add(createIssue(
+                severity = "WARNING",
+                technique = "ORDER_BY_WITHOUT_LIMIT",
+                description = "ORDER BY on full table scan without LIMIT can be expensive",
+                suggestion = "Consider adding LIMIT clause or WHERE conditions to reduce dataset size",
+                queryText = originalQuery,
+                filePath = filePath,
+                confidence = 0.6
+            ))
+        }
+        
+        return issues
+    }
+    
+    private fun detectJoinIssues(queryText: String, originalQuery: String, filePath: String): List<ReportIssue> {
+        val issues = mutableListOf<ReportIssue>()
+        
+        // Potential Cartesian joins (multiple FROM tables without JOIN keywords)
+        val fromPattern = Regex("FROM\\s+(\\w+(?:\\s*,\\s*\\w+)+)", RegexOption.IGNORE_CASE)
+        val joinPattern = Regex("\\s+JOIN\\s+", RegexOption.IGNORE_CASE)
+        
+        val fromMatch = fromPattern.find(queryText)
+        if (fromMatch != null && !joinPattern.containsMatchIn(queryText)) {
+            val tableCount = fromMatch.groupValues[1].split(",").size
+            if (tableCount > 1) {
+                issues.add(createIssue(
+                    severity = "CRITICAL",
+                    technique = "POTENTIAL_CARTESIAN_JOIN",
+                    description = "Multiple tables in FROM clause without explicit JOIN may create Cartesian product",
+                    suggestion = "Use explicit JOIN clauses instead of comma-separated tables in FROM",
+                    queryText = originalQuery,
+                    filePath = filePath,
+                    confidence = 0.8
+                ))
+            }
+        }
+        
+        // JOINs without proper conditions
+        if (queryText.contains("JOIN") && !queryText.contains("ON") && !queryText.contains("USING")) {
+            issues.add(createIssue(
+                severity = "WARNING",
+                technique = "JOIN_WITHOUT_CONDITION",
+                description = "JOIN clause found without ON or USING condition",
+                suggestion = "Ensure all JOINs have proper join conditions to avoid unexpected results",
+                queryText = originalQuery,
+                filePath = filePath,
+                confidence = 0.7
+            ))
+        }
+        
+        return issues
+    }
+    
+    private fun detectIndexIssues(queryText: String, originalQuery: String, filePath: String): List<ReportIssue> {
+        val issues = mutableListOf<ReportIssue>()
+        
+        // WHERE clause on potentially unindexed columns (hint for optimization)
+        val wherePattern = Regex("WHERE[^;]*?(\\w+)\\s*[=<>!]", RegexOption.IGNORE_CASE)
+        val whereMatches = wherePattern.findAll(queryText)
+        
+        for (match in whereMatches) {
+            val column = match.groupValues[1].lowercase()
+            // Skip common indexed columns
+            if (!isLikelyIndexedColumn(column)) {
+                issues.add(createIssue(
+                    severity = "INFO",
+                    technique = "POTENTIAL_MISSING_INDEX",
+                    description = "WHERE clause on column '$column' may benefit from an index",
+                    suggestion = "Consider adding an index on column '$column' if this query runs frequently",
+                    queryText = originalQuery,
+                    filePath = filePath,
+                    confidence = 0.5
+                ))
+                break // Only report once per query to avoid noise
+            }
+        }
+        
+        return issues
+    }
+    
+    private fun isLikelyIndexedColumn(column: String): Boolean {
+        val commonIndexedColumns = setOf(
+            "id", "uuid", "primary_key", "pk",
+            "created_at", "updated_at", "timestamp",
+            "status", "type", "category_id", "user_id"
+        )
+        return commonIndexedColumns.any { column.contains(it) }
+    }
+    
+    private fun createIssue(
+        severity: String,
+        technique: String,
+        description: String,
+        suggestion: String,
+        queryText: String,
+        filePath: String,
+        confidence: Double
+    ): ReportIssue {
+        return ReportIssue(
+            id = UUID.randomUUID(),
+            severity = severity,
+            technique = technique,
+            description = description,
+            suggestion = suggestion,
+            queryText = queryText,
+            location = IssueLocation(filePath, 1, 1, null),
+            confidence = confidence
+        )
     }
 }
