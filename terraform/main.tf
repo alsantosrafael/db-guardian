@@ -16,7 +16,7 @@ data "aws_caller_identity" "current" {}
 
 # Bucket definition
 resource "aws_s3_bucket" "reports" {
-  bucket = "query-analyzer-reports"
+  bucket = "dbguardian-reports"
 }
 
 # Cryptography
@@ -72,7 +72,7 @@ resource "aws_s3_bucket_policy" "reports" {
         Sid       = "AllowApplicationAccess"
         Effect    = "Allow"
         Principal = {
-          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/query-analyzer-role"
+          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/dbguardian-role"
         }
         Action = [
           "s3:GetObject",

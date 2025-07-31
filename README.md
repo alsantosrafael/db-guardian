@@ -92,7 +92,7 @@ aws:
 app:
   reports:
     s3:
-      bucket: ${REPORTS_S3_BUCKET:query-analyzer-reports}
+      bucket: ${REPORTS_S3_BUCKET:dbguardian-reports}
 ```
 
 **Benefits of This Approach:**
@@ -103,13 +103,19 @@ app:
 
 ### Local Development (Recommended)
 
-**🚀 Quick Setup with Docker Compose:**
+**🚀 One-Command Setup:**
+```bash
+# Start everything: services + S3 bucket + application
+./dev.sh
+```
+
+**🔧 Manual Setup:**
 ```bash
 # Start required services (PostgreSQL, LocalStack S3)
 docker-compose up -d postgres localstack
 
-# Wait for services to be ready
-sleep 10
+# Create S3 bucket (CRITICAL - prevents analysis failures!)
+aws --endpoint-url=http://localhost:4566 s3 mb s3://dbguardian-reports
 
 # Run the application
 SPRING_PROFILES_ACTIVE=local ./gradlew bootRun
@@ -120,12 +126,13 @@ SPRING_PROFILES_ACTIVE=local ./gradlew bootRun
 # Health check
 curl http://localhost:8080/actuator/health
 
-# Run analysis on test data
+# Run analysis on test data (requires authentication)
 curl -X POST http://localhost:8080/api/analyze \
   -H "Content-Type: application/json" \
+  -H "x-api-token: dev-token-change-in-production" \
   -d '{
     "mode": "STATIC",
-    "source": "src/test/resources/test-data",
+    "source": "src/test/resources/test-data-2",
     "config": {
       "dialect": "POSTGRESQL"
     }
@@ -304,8 +311,26 @@ The scanner detects SQL in these JVM-focused file types:
 ## Testing & Quality
 
 - **Comprehensive test suite**: Unit and integration tests
-- **Stability testing**: `./scripts/stability-test.sh` for end-to-end verification
+- **Load testing**: `./load-tests/run-load-test.sh` for professional performance testing
+- **Smoke testing**: `./scripts/run-smoke-test.sh` for quick functionality verification
 - **Local report access**: `./scripts/download-reports.sh` for easy report viewing
+
+### Load Testing
+
+**Run Professional Load Tests:**
+```bash
+# Prerequisites: Install k6 (https://k6.io/docs/getting-started/installation/)
+# Make sure application is running first
+
+# Run complete load testing suite
+./load-tests/run-load-test.sh
+
+# Run just the load test
+./load-tests/run-load-test.sh load
+
+# Quick k6 test without reports
+k6 run load-tests/load-test.js
+```
 
 ## Contributing
 
