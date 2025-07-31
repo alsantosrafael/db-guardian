@@ -1,7 +1,6 @@
 package com.dbguardian.reporting
 
 import org.springframework.beans.factory.annotation.Value
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.stereotype.Service
 import software.amazon.awssdk.core.sync.RequestBody
 import software.amazon.awssdk.services.s3.S3Client
@@ -14,15 +13,15 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
 @Service
-@ConditionalOnProperty(name = ["app.reports.storage.type"], havingValue = "s3")
 class S3ReportStorage(
     private val s3Client: S3Client,
     private val s3Presigner: S3Presigner,
-    @Value("\${app.reports.s3.bucket}") private val bucketName: String,
-    @Value("\${app.reports.s3.prefix:reports/}") private val keyPrefix: String
-) : ReportStorage {
+    @Value("\${storage.s3.bucket}") private val bucketName: String
+) {
     
-    override fun storeReport(report: AnalysisReport): ReportLocation {
+    private val keyPrefix = "reports/"
+    
+    fun storeReport(report: AnalysisReport): ReportLocation {
         val timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy/MM/dd"))
         val key = "${keyPrefix}${timestamp}/${report.runId}.json"
         
@@ -95,7 +94,7 @@ class S3ReportStorage(
         }""".trimIndent()
     }
     
-    override fun storeMarkdownReport(report: AnalysisReport): ReportLocation {
+    fun storeMarkdownReport(report: AnalysisReport): ReportLocation {
         val timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy/MM/dd"))
         val key = "${keyPrefix}${timestamp}/${report.runId}.md"
         
@@ -237,7 +236,7 @@ class S3ReportStorage(
         else -> "❓"
     }
     
-    override fun generateAccessUrl(location: ReportLocation, expirationMinutes: Long): String {
+    fun generateAccessUrl(location: ReportLocation, expirationMinutes: Long = 15): String {
         return when (location.type) {
             "s3" -> generatePresignedUrl(location.bucket!!, location.key!!, expirationMinutes)
             else -> throw IllegalArgumentException("Unsupported location type: ${location.type}")

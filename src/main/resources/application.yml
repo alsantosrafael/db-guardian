@@ -1,29 +1,22 @@
 spring:
   application:
-    name: query-analyzer
+    name: db-guardian
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:local}
   
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/queryanalyzer}
-    username: ${DB_USERNAME:queryanalyzer}
-    password: ${DB_PASSWORD:password}
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/dbguardian}
+    username: ${DATABASE_USER:dbguardian}
+    password: ${DATABASE_PASSWORD:password}
     driver-class-name: org.postgresql.Driver
   
-  logging:
-  level:
-    SECURITY_AUDIT: INFO
-  pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss} [%X{traceId}] %-5level %logger{36} - %msg%n"
- 
   jpa:
     hibernate:
       ddl-auto: validate
-    show-sql: ${SPRING_JPA_SHOW_SQL:false}
+    show-sql: false
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
-        format_sql: true
   
   flyway:
     enabled: true
@@ -31,60 +24,33 @@ spring:
     baseline-on-migrate: true
 
 server:
-  port: ${SERVER_PORT:8080}
+  port: ${PORT:8080}
 
 management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics,prometheus
+        include: health
   endpoint:
     health:
       show-details: always
 
-# AWS Configuration (environment-specific via env vars)
-aws:
+# Storage Configuration
+storage:
+  type: s3
   s3:
-    endpoint: ${AWS_S3_ENDPOINT:}
+    bucket: ${S3_BUCKET:db-guardian-reports}
     region: ${AWS_REGION:us-east-1}
-    access-key: ${AWS_ACCESS_KEY:}
-    secret-key: ${AWS_SECRET_KEY:}
-    path-style-access: ${AWS_S3_PATH_STYLE:false}
+    endpoint: ${S3_ENDPOINT:}
 
-# Application Configuration
-app:
-  internal:
-    token: ${APP_INTERNAL_TOKEN:abacaxi}
-  
-  reports:
-    storage:
-      type: ${REPORTS_STORAGE_TYPE:local}
-    s3:
-      bucket: ${REPORTS_S3_BUCKET:query-analyzer-reports}
-      prefix: ${REPORTS_S3_PREFIX:reports/}
-    local:
-      directory: ${REPORTS_LOCAL_DIRECTORY:./reports}
-      base-url: ${REPORTS_LOCAL_BASE_URL:file://}
-  
-  openai:
-    api-key: ${OPENAI_API_KEY:}
-  
-  analysis:
-    confidence-threshold: ${ANALYSIS_CONFIDENCE_THRESHOLD:0.7}
-    use-local-llm: ${USE_LOCAL_LLM:false}
-
-# Ollama Configuration (for local development)
-ollama:
-  endpoint: ${OLLAMA_ENDPOINT:http://localhost:11434}
-  model: ${OLLAMA_MODEL:llama3.2:latest}
+# Security
+security:
+  api-token: ${API_TOKEN:dev-token-change-in-production}
 
 logging:
   level:
-    com.queryanalyzer: ${LOG_LEVEL:INFO}
-    org.springframework.modulith: ${LOG_LEVEL_MODULITH:INFO}
-    software.amazon.awssdk: ${LOG_LEVEL_AWS:WARN}
-  pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+    com.dbguardian: ${LOG_LEVEL:INFO}
+    software.amazon.awssdk: WARN
 
 ---
 # Local Development Profile
@@ -93,56 +59,14 @@ spring:
     activate:
       on-profile: local
 
-aws:
+storage:
+  type: local
   s3:
-    endpoint: http://localhost:4566  # LocalStack
-    access-key: test
-    secret-key: test
-    path-style-access: true
-
-app:
-  reports:
-    storage:
-      type: s3  # Use S3 in local development (LocalStack)
-  analysis:
-    use-local-llm: true
+    endpoint: http://localhost:4566  # LocalStack if needed
 
 logging:
   level:
-    com.queryanalyzer: DEBUG
-
----
-# Docker/Container Profile
-spring:
-  config:
-    activate:
-      on-profile: docker
-  
-  datasource:
-    url: jdbc:postgresql://postgres:5432/queryanalyzer
-
-logging:
-  pattern:
-    console: "%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
-
----
-# Test Profile (for unit tests - no S3 dependency)
-spring:
-  config:
-    activate:
-      on-profile: test
-
-app:
-  reports:
-    storage:
-      type: local  # Use local storage for tests
-
-aws:
-  s3:
-    endpoint: http://localhost:4566  # LocalStack for tests
-    access-key: test
-    secret-key: test
-    path-style-access: true
+    com.dbguardian: DEBUG
 
 ---
 # Production Profile
@@ -151,14 +75,9 @@ spring:
     activate:
       on-profile: production
 
-app:
-  reports:
-    storage:
-      type: s3  # Use S3 in production
+storage:
+  type: s3
 
 logging:
   level:
-    com.queryanalyzer: WARN
-    org.springframework.modulith: WARN
-  pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss} [%X{traceId}] %-5level %logger{36} - %msg%n"
+    com.dbguardian: WARN

@@ -12,7 +12,7 @@ import java.security.MessageDigest
 
 @Component
 class ApiTokenAuthenticationFilter(
-    @Value("\${app.internal.token:}") private val validToken: String
+    @Value("\${security.api-token:}") private val validToken: String
 ) : OncePerRequestFilter() {
     
     override fun doFilterInternal(

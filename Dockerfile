@@ -1,33 +1,31 @@
-FROM openjdk:17-jdk-slim
+# Build stage
+FROM gradle:8-jdk21-alpine AS builder
+WORKDIR /app
+COPY build.gradle.kts settings.gradle.kts ./
+COPY gradle gradle
+COPY src src
+RUN gradle build -x test --no-daemon
 
-# Install required packages
-RUN apt-get update && apt-get install -y \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
-
-# Set working directory
+# Runtime stage  
+FROM openjdk:21-jre-slim
 WORKDIR /app
 
-# Copy gradle wrapper and build files
-COPY gradlew ./
-COPY gradle/ gradle/
-COPY build.gradle.kts settings.gradle.kts ./
+# Install curl for health checks
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 
-# Copy source code
-COPY src/ src/
+# Create non-root user
+RUN groupadd -r appuser && useradd -r -g appuser appuser
 
-# Make gradlew executable
-RUN chmod +x gradlew
+# Copy jar from build stage
+COPY --from=builder /app/build/libs/*.jar app.jar
 
-# Build the application
-RUN ./gradlew build -x test
-
-# Expose port
-EXPOSE 8080
+# Change ownership
+RUN chown appuser:appuser app.jar
+USER appuser
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:8080/api/health || exit 1
+HEALTHCHECK --interval=30s --timeout=3s --start-period=60s --retries=3 \
+  CMD curl -f http://localhost:8080/actuator/health || exit 1
 
-# Run the application
-CMD ["./gradlew", "bootRun"]
+EXPOSE 8080
+ENTRYPOINT ["java", "-jar", "app.jar"]

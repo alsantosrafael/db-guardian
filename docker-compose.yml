@@ -1,0 +1,61 @@
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: dbguardian-postgres
+    environment:
+      POSTGRES_DB: dbguardian
+      POSTGRES_USER: dbguardian
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dbguardian"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # LocalStack S3 (for development)
+  localstack:
+    image: localstack/localstack:3.0
+    container_name: dbguardian-localstack
+    ports:
+      - "4566:4566"
+    environment:
+      SERVICES: s3
+      DEBUG: 0
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+    volumes:
+      - localstack_data:/var/lib/localstack
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Application
+  app:
+    build: .
+    container_name: dbguardian-app
+    ports:
+      - "8080:8080"
+    environment:
+      DATABASE_URL: jdbc:postgresql://postgres:5432/dbguardian
+      DATABASE_USER: dbguardian
+      DATABASE_PASSWORD: password
+      S3_ENDPOINT: http://localstack:4566
+      S3_BUCKET: dbguardian-reports
+      API_TOKEN: dev-token
+    depends_on:
+      postgres:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  localstack_data:

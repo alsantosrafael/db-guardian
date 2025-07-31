@@ -1,1 +1,1 @@
-rootProject.name = "query-analyzer"
+rootProject.name = "db-guardian"

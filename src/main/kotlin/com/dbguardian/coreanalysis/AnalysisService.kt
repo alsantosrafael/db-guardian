@@ -5,8 +5,8 @@ import com.dbguardian.coreanalysis.domain.AnalysisMode
 import com.dbguardian.coreanalysis.domain.AnalysisRun
 import com.dbguardian.coreanalysis.domain.AnalysisSummary
 import com.dbguardian.reporting.AnalysisReport
-import com.dbguardian.reporting.ReportStorage
 import com.dbguardian.reporting.ReportLocation
+import com.dbguardian.reporting.S3ReportStorage
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.util.UUID
@@ -19,7 +19,7 @@ import java.util.UUID
 @Transactional
 class AnalysisService(
     private val analysisRunRepository: AnalysisRunRepository,
-    private val reportStorage: ReportStorage
+    private val reportStorage: S3ReportStorage
 ) {
     
     fun execute(config: AnalysisConfig): UUID {
@@ -58,10 +58,7 @@ class AnalysisService(
         )
         
         analysisRun.complete(summary)
-        when (reportLocation.type) {
-            "s3" -> analysisRun.attachReport(reportLocation.bucket ?: "", reportLocation.key ?: "")
-            "local" -> analysisRun.attachReport("local", reportLocation.filePath ?: "")
-        }
+        analysisRun.attachReport(reportLocation.bucket ?: "", reportLocation.key ?: "")
         
         analysisRunRepository.save(analysisRun)
     }
@@ -71,10 +68,10 @@ class AnalysisService(
         
         return analysisRun.getReportLocation()?.let { (bucket, key) ->
             val location = ReportLocation(
-                type = if (bucket == "local") "local" else "s3",
-                bucket = if (bucket == "local") null else bucket,
-                key = if (bucket == "local") null else key,
-                filePath = if (bucket == "local") key else null
+                type = "s3",
+                bucket = bucket,
+                key = key,
+                filePath = null
             )
             reportStorage.generateAccessUrl(location)
         }

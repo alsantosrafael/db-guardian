@@ -9,9 +9,9 @@ echo "🧪 Running Query Analyzer Smoke Test"
 echo "===================================="
 
 # Check if application is running
-if ! curl -f http://localhost:8080/api/health >/dev/null 2>&1; then
+if ! curl -f http://localhost:8080/actuator/health >/dev/null 2>&1; then
     echo "❌ Application is not running. Start it first:"
-    echo "   ./gradlew bootRun --args='--spring.profiles.active=local'"
+    echo "   S3_ENDPOINT=http://localhost:4566 ./gradlew bootRun"
     exit 1
 fi
 
@@ -23,19 +23,18 @@ fi
 
 echo ""
 echo "1️⃣ Testing health endpoint..."
-curl -s http://localhost:8080/api/health | jq '.' || echo "Health check failed"
+curl -s http://localhost:8080/actuator/health | jq '.' || echo "Health check failed"
 
 echo ""
 echo "2️⃣ Starting analysis..."
 ANALYSIS_RESPONSE=$(curl -s -X POST http://localhost:8080/api/analyze \
+  -H "x-api-token: dev-token-change-in-production" \
   -H "Content-Type: application/json" \
   -d '{
     "mode": "static",
-    "source": "repo",
+    "source": "src/test/resources/test-data-2",
     "config": {
-      "dialect": "postgresql",
-      "migrationPaths": ["src/test/resources/test-data"],
-      "codePath": "src/main/kotlin"
+      "dialect": "postgresql"
     }
   }')
 
@@ -57,7 +56,7 @@ sleep 10
 
 echo ""
 echo "4️⃣ Getting analysis report..."
-REPORT_RESPONSE=$(curl -s "http://localhost:8080/api/report/$RUN_ID")
+REPORT_RESPONSE=$(curl -s -H "x-api-token: dev-token-change-in-production" "http://localhost:8080/api/report/$RUN_ID")
 echo "Report response: $REPORT_RESPONSE"
 
 # Check if we got a report URL
