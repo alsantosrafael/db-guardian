@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service
 import java.io.File
 import java.time.LocalDateTime
 import java.util.UUID
+import java.util.stream.Collectors
 
 /**
  * Static analyzer focused on JVM environments
@@ -20,29 +21,45 @@ class SqlStaticAnalyzer(
 ) {
     
     fun analyzeCode(runId: UUID, config: AnalysisConfig) {
+        val startTime = System.currentTimeMillis()
         try {
+            val fileStart = System.currentTimeMillis()
             val sqlFiles = findJvmSqlFiles(config)
+            println("📁 File discovery took: ${System.currentTimeMillis() - fileStart}ms for ${sqlFiles.size} files")
             println("🔍 Found ${sqlFiles.size} JVM/SQL files to analyze: ${sqlFiles.map { it.absolutePath }}")
-            
-            val allQueries = mutableListOf<Pair<ParsedQuery, String>>()
-            
-            sqlFiles.forEach { file ->
-                println("📄 Processing: ${file.absolutePath}")
-                val queries = extractAndParseQueries(file)
-                queries.forEach { query ->
-                    allQueries.add(query to file.absolutePath)
-                }
-            }
-            
+
+            val processStart = System.currentTimeMillis()
+            // val allQueries = mutableListOf<Pair<ParsedQuery, String>>()
+
+            // Analyzing files concurrently
+            val allQueries = sqlFiles.parallelStream()
+                .flatMap { file ->
+                    val fileProcessStart = System.currentTimeMillis()
+                    println("📄 Processing: ${file.absolutePath}")
+                    val queries = extractAndParseQueries(file)
+                    val processingTime = System.currentTimeMillis() - fileProcessStart
+                    println("📄 File ${file.name} took: ${processingTime}ms for ${queries.size} queries (parallel)")
+                    queries.stream().map { query -> query to file.absolutePath }
+            }.collect(Collectors.toList())
+            println("📊 Total file processing: ${System.currentTimeMillis() - processStart}ms")
+
             println("🔍 Found ${allQueries.size} SQL queries to analyze")
-            
-            // Simple analysis without RAG - just basic SQL parsing results
+
+            val analysisStart = System.currentTimeMillis()
             val report = generateBasicReport(runId, allQueries)
-            
+            println("🔍 Analysis took: ${System.currentTimeMillis() - analysisStart}ms")
+
             // Complete analysis with S3 report storage
             println("💾 Storing analysis report to S3 and updating database")
-            analysisService.completeAnalysisWithReport(runId, report)
+            val storageStart = System.currentTimeMillis()
+            val dbStart = System.currentTimeMillis()
+            val jsonStart = System.currentTimeMillis()
+            val markdownStart = System.currentTimeMillis()
+
+            analysisService.completeAnalysisWithReportConcurrent(runId, report)
+            println("💾 Storage took: ${System.currentTimeMillis() - storageStart}ms")
             println("✅ Analysis completed successfully")
+            println("⏱️ Total analysis time: ${System.currentTimeMillis() - startTime}ms")
             
         } catch (e: Exception) {
             analysisService.failAnalysis(runId)
