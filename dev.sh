@@ -62,4 +62,10 @@ echo ""
 # Run application
 export SPRING_PROFILES_ACTIVE=local
 export S3_ENDPOINT=http://localhost:4566
-./gradlew bootRun
+
+echo "💡 Press Ctrl+C to stop everything cleanly"
+echo ""
+
+# Use --no-daemon to prevent background processes that survive script termination
+# Use --console=plain for cleaner output
+./gradlew bootRun --console=plain --no-daemon
