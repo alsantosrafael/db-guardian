@@ -49,7 +49,7 @@ services:
       DATABASE_PASSWORD: password
       S3_ENDPOINT: http://localstack:4566
       S3_BUCKET: dbguardian-reports
-      API_TOKEN: dev-token
+      API_TOKEN: abacaxi
     depends_on:
       postgres:
         condition: service_healthy

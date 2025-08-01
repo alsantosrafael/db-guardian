@@ -92,7 +92,7 @@ aws:
 app:
   reports:
     s3:
-      bucket: ${REPORTS_S3_BUCKET:dbguardian-reports}
+      bucket: ${REPORTS_S3_BUCKET:dbguardian}
 ```
 
 **Benefits of This Approach:**
@@ -115,7 +115,7 @@ app:
 docker-compose up -d postgres localstack
 
 # Create S3 bucket (CRITICAL - prevents analysis failures!)
-aws --endpoint-url=http://localhost:4566 s3 mb s3://dbguardian-reports
+aws --endpoint-url=http://localhost:4566 s3 mb s3://dbguardian
 
 # Run the application
 SPRING_PROFILES_ACTIVE=local ./gradlew bootRun
@@ -129,7 +129,7 @@ curl http://localhost:8080/actuator/health
 # Run analysis on test data (requires authentication)
 curl -X POST http://localhost:8080/api/analyze \
   -H "Content-Type: application/json" \
-  -H "x-api-token: dev-token-change-in-production" \
+  -H "x-api-token: abacaxi" \
   -d '{
     "mode": "STATIC",
     "source": "src/test/resources/test-data-2",

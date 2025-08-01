@@ -42,10 +42,10 @@ echo "✅ LocalStack ready"
 
 # Create S3 bucket (CRITICAL: prevents analysis failures!)
 echo "🪣 Creating S3 bucket..."
-aws --endpoint-url=http://localhost:4566 s3 mb s3://dbguardian-reports --region us-east-1 >/dev/null 2>&1 || echo "   Bucket exists"
+aws --endpoint-url=http://localhost:4566 s3 mb s3://dbguardian --region us-east-1 >/dev/null 2>&1 || echo "   Bucket exists"
 
 # Verify bucket
-if aws --endpoint-url=http://localhost:4566 s3 ls s3://dbguardian-reports >/dev/null 2>&1; then
+if aws --endpoint-url=http://localhost:4566 s3 ls s3://dbguardian >/dev/null 2>&1; then
     echo "✅ S3 bucket ready"
 else
     echo "❌ S3 bucket failed - analysis will not work!"

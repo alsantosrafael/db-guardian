@@ -27,8 +27,8 @@ curl -s http://localhost:8080/actuator/health | jq '.' || echo "Health check fai
 
 echo ""
 echo "2️⃣ Starting analysis..."
-ANALYSIS_RESPONSE=$(curl -s -X POST http://localhost:8080/api/analyze \
-  -H "x-api-token: dev-token-change-in-production" \
+ANALYSIS_RESPONSE=$(curl -s -X POST http://localhost:8080/api/v1/analysis \
+  -H "x-api-token: abacaxi" \
   -H "Content-Type: application/json" \
   -d '{
     "mode": "static",
@@ -58,7 +58,7 @@ sleep 10
 
 echo ""
 echo "4️⃣ Getting analysis report..."
-REPORT_RESPONSE=$(curl -s -H "x-api-token: dev-token-change-in-production" "http://localhost:8080/api/report/$RUN_ID")
+REPORT_RESPONSE=$(curl -s -H "x-api-token: abacaxi" "http://localhost:8080/api/v1/report/$RUN_ID")
 echo "Report response: $REPORT_RESPONSE"
 
 # Check if we got a report URL

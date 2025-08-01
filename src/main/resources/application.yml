@@ -39,13 +39,13 @@ management:
 storage:
   type: s3
   s3:
-    bucket: ${S3_BUCKET:dbguardian-reports}
+    bucket: ${S3_BUCKET:dbguardian}
     region: ${AWS_REGION:us-east-1}
     endpoint: ${S3_ENDPOINT:}
 
 # Security
 security:
-  api-token: ${API_TOKEN:dev-token-change-in-production}
+  api-token: ${API_TOKEN:abacaxi}
 
 logging:
   level:
