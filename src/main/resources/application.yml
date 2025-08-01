@@ -39,7 +39,7 @@ management:
 storage:
   type: s3
   s3:
-    bucket: ${S3_BUCKET:db-guardian-reports}
+    bucket: ${S3_BUCKET:dbguardian-reports}
     region: ${AWS_REGION:us-east-1}
     endpoint: ${S3_ENDPOINT:}
 

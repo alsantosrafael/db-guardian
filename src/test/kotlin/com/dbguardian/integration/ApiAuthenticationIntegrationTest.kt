@@ -44,7 +44,7 @@ class ApiAuthenticationIntegrationTest {
     @Test
     fun `protected endpoint should return 401 without token`() {
         val response = restTemplate.getForEntity(
-            createUrl("/api/analyze"), 
+            createUrl("/api/v1/analysis"), 
             String::class.java
         )
         
@@ -58,7 +58,7 @@ class ApiAuthenticationIntegrationTest {
         val entity = HttpEntity<String>(headers)
         
         val response = restTemplate.exchange(
-            createUrl("/api/analyze"),
+            createUrl("/api/v1/analysis"),
             HttpMethod.GET,
             entity,
             String::class.java
@@ -86,7 +86,7 @@ class ApiAuthenticationIntegrationTest {
         val entity = HttpEntity(requestBody, headers)
         
         val response = restTemplate.exchange(
-            createUrl("/api/analyze"),
+            createUrl("/api/v1/analysis"),
             HttpMethod.POST,
             entity,
             String::class.java
@@ -107,7 +107,7 @@ class ApiAuthenticationIntegrationTest {
         val entity = HttpEntity<String>(headers)
         
         val response = restTemplate.exchange(
-            createUrl("/api/analyze"),
+            createUrl("/api/v1/analysis"),
             HttpMethod.GET,
             entity,
             String::class.java
@@ -124,7 +124,7 @@ class ApiAuthenticationIntegrationTest {
         
         // Test GET with valid token
         val getResponse = restTemplate.exchange(
-            createUrl("/api/analyze"),
+            createUrl("/api/v1/analysis"),
             HttpMethod.GET,
             entity,
             String::class.java
@@ -135,7 +135,7 @@ class ApiAuthenticationIntegrationTest {
         
         // Test OPTIONS with valid token (if supported)
         val optionsResponse = restTemplate.exchange(
-            createUrl("/api/analyze"),
+            createUrl("/api/v1/analysis"),
             HttpMethod.OPTIONS,
             entity,
             String::class.java

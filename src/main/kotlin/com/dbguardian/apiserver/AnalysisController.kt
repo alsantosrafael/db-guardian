@@ -12,13 +12,13 @@ import java.util.*
 import java.util.concurrent.CompletableFuture
 
 @RestController
-@RequestMapping("/api")
+@RequestMapping("/api/v1")
 class AnalysisController(
     private val analysisService: AnalysisService,
     private val sqlStaticAnalyzer: SqlStaticAnalyzer
 ) {
     
-    @PostMapping("/analyze")
+    @PostMapping("/analysis")
     fun startAnalysis(@Valid @RequestBody request: AnalysisRequest): ResponseEntity<AnalysisResponse> {
         try {
             val config = AnalysisConfig(
@@ -45,7 +45,11 @@ class AnalysisController(
                         else -> throw IllegalArgumentException("Invalid mode: ${request.mode}")
                     }
                 } catch (e: Exception) {
-                    analysisService.failAnalysis(runId)
+                    // Only fail analysis if it hasn't already completed successfully
+                    val analysisRun = analysisService.getAnalysisRun(runId)
+                    if (analysisRun?.status != AnalysisStatus.COMPLETED) {
+                        analysisService.failAnalysis(runId)
+                    }
                 }
             }
             
