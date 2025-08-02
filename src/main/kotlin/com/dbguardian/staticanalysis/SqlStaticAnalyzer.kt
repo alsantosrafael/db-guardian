@@ -29,8 +29,6 @@ class SqlStaticAnalyzer(
             println("🔍 Found ${sqlFiles.size} JVM/SQL files to analyze: ${sqlFiles.map { it.absolutePath }}")
 
             val processStart = System.currentTimeMillis()
-            // val allQueries = mutableListOf<Pair<ParsedQuery, String>>()
-
             // Analyzing files concurrently
             val allQueries = sqlFiles.parallelStream()
                 .flatMap { file ->
@@ -342,7 +340,6 @@ class SqlStaticAnalyzer(
     private fun extractJvmSqlPatterns(line: String): List<String> {
         val results = mutableListOf<String>()
         
-        // JVM string patterns - more sophisticated than naive cross-language approach
         val patterns = listOf(
             // Multi-line strings in Kotlin
             "\"\"\"([^\"]*(?:SELECT|INSERT|UPDATE|DELETE|CREATE|ALTER|DROP)[^\"]*)\"\"\"".toRegex(RegexOption.IGNORE_CASE),
@@ -417,38 +414,65 @@ class SqlStaticAnalyzer(
     private fun detectJpaPatterns(originalQuery: String, filePath: String): List<ReportIssue> {
         val issues = mutableListOf<ReportIssue>()
         
+        if (isTestFile(filePath)) {
+            return issues
+        }
+        
         when {
+            // 4. N+1 Query Risk in @OneToMany relationships
             originalQuery.startsWith("JPA_N_PLUS_ONE_RISK:") -> {
                 issues.add(createIssue(
-                    severity = "CRITICAL",
-                    technique = "N_PLUS_ONE_QUERY_RISK",
-                    description = "@OneToMany relationship without explicit fetch strategy may cause N+1 queries",
-                    suggestion = "Add fetch = FetchType.EAGER, @BatchSize annotation, or use @Query with JOIN FETCH",
-                    queryText = originalQuery.substringAfter(":").trim(),
-                    filePath = filePath,
-                    confidence = 0.8
-                ))
-            }
-            originalQuery.startsWith("JPA_FIND_ALL_WITH_COLLECTIONS:") -> {
-                issues.add(createIssue(
-                    severity = "WARNING", 
-                    technique = "FIND_ALL_WITH_COLLECTIONS",
-                    description = "findAll() on entities with @OneToMany collections may cause performance issues",
-                    suggestion = "Use custom @Query with JOIN FETCH or implement pagination",
+                    severity = "WARNING",
+                    technique = "N_PLUS_ONE_RISK",
+                    description = "@OneToMany without fetch strategy can cause N+1 queries in some scenarios",
+                    suggestion = "Consider @BatchSize(25), @EntityGraph, or @Query with JOIN FETCH if loading collections",
                     queryText = originalQuery.substringAfter(":").trim(),
                     filePath = filePath,
                     confidence = 0.7
                 ))
             }
-            originalQuery.startsWith("JPA_MISSING_JOIN_FETCH:") -> {
+            
+            // 5. Unparameterized Native Queries (high injection risk)
+            originalQuery.contains("nativeQuery.*true".toRegex()) && 
+            !originalQuery.contains(":\\w+|\\?\\d+".toRegex()) -> {
                 issues.add(createIssue(
-                    severity = "INFO",
-                    technique = "MISSING_JOIN_FETCH",
-                    description = "@Query with JOIN but no FETCH may not initialize relationships properly",  
-                    suggestion = "Consider using JOIN FETCH to eagerly load related entities",
-                    queryText = originalQuery.substringAfter(":").trim(),
+                    severity = "CRITICAL",
+                    technique = "UNPARAMETERIZED_NATIVE_QUERY",
+                    description = "Native query without parameters is vulnerable to SQL injection",
+                    suggestion = "Use named parameters (:param) or positional parameters (?1, ?2)",
+                    queryText = originalQuery,
                     filePath = filePath,
-                    confidence = 0.6
+                    confidence = 0.9
+                ))
+            }
+            
+            // 6. @Modifying without @Transactional
+            originalQuery.contains("@Modifying") && filePath.contains("Repository") -> {
+                val fileContent = try { File(filePath).readText() } catch (e: Exception) { "" }
+                if (!fileContent.contains("@Transactional")) {
+                    issues.add(createIssue(
+                        severity = "CRITICAL",
+                        technique = "MODIFYING_WITHOUT_TRANSACTIONAL",
+                        description = "@Modifying queries require @Transactional annotation",
+                        suggestion = "Add @Transactional annotation to the method or class",
+                        queryText = originalQuery,
+                        filePath = filePath,
+                        confidence = 0.9
+                    ))
+                }
+            }
+            
+            // 7. Cartesian Product Risk (multiple tables without JOIN)
+            originalQuery.contains("FROM\\s+\\w+\\s*,\\s*\\w+".toRegex()) && 
+            !originalQuery.contains("JOIN") -> {
+                issues.add(createIssue(
+                    severity = "CRITICAL",
+                    technique = "CARTESIAN_PRODUCT_RISK",
+                    description = "Multiple tables in FROM without explicit JOIN creates cartesian product",
+                    suggestion = "Use explicit JOIN syntax: FROM table1 t1 JOIN table2 t2 ON t1.id = t2.table1_id",
+                    queryText = originalQuery,
+                    filePath = filePath,
+                    confidence = 0.85
                 ))
             }
         }
@@ -459,26 +483,30 @@ class SqlStaticAnalyzer(
     private fun detectBasicSqlPatterns(queryText: String, originalQuery: String, filePath: String): List<ReportIssue> {
         val issues = mutableListOf<ReportIssue>()
         
-        // SELECT * detection
-        if (queryText.contains("SELECT *")) {
+        if (isTestFile(filePath)) {
+            return issues
+        }
+        
+        // 1. SQL Injection Risk - String Concatenation
+        if (hasStringConcatenation(originalQuery)) {
             issues.add(createIssue(
-                severity = "WARNING",
-                technique = "AVOID_SELECT_STAR",
-                description = "Using SELECT * can lead to performance issues and breaks when schema changes",
-                suggestion = "Replace SELECT * with explicit column names",
+                severity = "CRITICAL",
+                technique = "SQL_INJECTION_RISK",
+                description = "String concatenation in SQL queries enables SQL injection attacks",
+                suggestion = "Use parameterized queries with @Param or ?1, ?2 placeholders",
                 queryText = originalQuery,
                 filePath = filePath,
-                confidence = 0.9
+                confidence = 0.95
             ))
         }
         
-        // Missing WHERE clause in UPDATE/DELETE
+        // 2. Missing WHERE clause in UPDATE/DELETE (data loss risk)
         if (queryText.contains("UPDATE") && !queryText.contains("WHERE")) {
             issues.add(createIssue(
                 severity = "CRITICAL",
-                technique = "REQUIRE_WHERE_CLAUSE",
-                description = "UPDATE without WHERE clause can modify all rows",
-                suggestion = "Add WHERE clause to UPDATE statement",
+                technique = "MISSING_WHERE_CLAUSE",
+                description = "UPDATE without WHERE clause will modify ALL rows",
+                suggestion = "Add WHERE clause to limit which rows are updated",
                 queryText = originalQuery,
                 filePath = filePath,
                 confidence = 1.0
@@ -488,16 +516,43 @@ class SqlStaticAnalyzer(
         if (queryText.contains("DELETE") && !queryText.contains("WHERE")) {
             issues.add(createIssue(
                 severity = "CRITICAL",
-                technique = "REQUIRE_WHERE_CLAUSE",
-                description = "DELETE without WHERE clause can remove all rows",
-                suggestion = "Add WHERE clause to DELETE statement",
+                technique = "MISSING_WHERE_CLAUSE", 
+                description = "DELETE without WHERE clause will remove ALL rows",
+                suggestion = "Add WHERE clause to limit which rows are deleted",
                 queryText = originalQuery,
                 filePath = filePath,
                 confidence = 1.0
             ))
         }
         
+        // 3. SELECT * in production code (performance/maintenance risk)
+        if (queryText.contains("SELECT *") && !isTestFile(filePath)) {
+            issues.add(createIssue(
+                severity = "WARNING",
+                technique = "SELECT_STAR_USAGE",
+                description = "SELECT * can cause performance issues and breaks when schema changes",
+                suggestion = "Replace with explicit column names: SELECT id, name, email FROM users",
+                queryText = originalQuery,
+                filePath = filePath,
+                confidence = 0.8
+            ))
+        }
+        
         return issues
+    }
+    
+    private fun isTestFile(filePath: String): Boolean {
+        return filePath.contains("/test/") || 
+               filePath.contains("/src/test/") ||
+               filePath.endsWith("Test.kt") ||
+               filePath.endsWith("Test.java")
+    }
+    
+    private fun hasStringConcatenation(query: String): Boolean {
+        // Detect string concatenation patterns
+        return query.contains("""\+\s*["']""".toRegex()) ||  // + "string"
+               query.contains("""["']\s*\+""".toRegex()) ||  // "string" +
+               query.contains("$") && query.contains("{")     // Kotlin string templates in SQL
     }
     
     private fun detectPerformanceIssues(queryText: String, originalQuery: String, filePath: String): List<ReportIssue> {
