@@ -1,23 +1,32 @@
 package com.dbguardian.apiserver
 
-import com.dbguardian.apiserver.dto.*
+import com.dbguardian.apiserver.dto.AnalysisRequest
+import com.dbguardian.apiserver.dto.AnalysisResponse
+import com.dbguardian.apiserver.dto.ReportResponse
 import com.dbguardian.coreanalysis.AnalysisService
-import com.dbguardian.coreanalysis.domain.*
-import com.dbguardian.staticanalysis.SqlStaticAnalyzer
+import com.dbguardian.coreanalysis.AsyncAnalysisService
+import com.dbguardian.coreanalysis.domain.AnalysisConfig
+import com.dbguardian.coreanalysis.domain.AnalysisStatus
 import jakarta.validation.Valid
 import org.slf4j.LoggerFactory
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
-import org.springframework.web.bind.annotation.*
+import org.springframework.web.bind.annotation.GetMapping
+import org.springframework.web.bind.annotation.PathVariable
+import org.springframework.web.bind.annotation.PostMapping
+import org.springframework.web.bind.annotation.RequestBody
+import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestParam
+import org.springframework.web.bind.annotation.RestController
+
 import java.util.*
 import java.util.concurrent.CompletableFuture
-import java.util.logging.Logger
 
 @RestController
 @RequestMapping("/api/v1")
 class AnalysisController(
     private val analysisService: AnalysisService,
-    private val sqlStaticAnalyzer: SqlStaticAnalyzer,
+    private val asyncAnalysisService: AsyncAnalysisService,
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
@@ -27,8 +36,8 @@ class AnalysisController(
             val config = AnalysisConfig(
                 dialect = request.config.dialect,
                 source = request.source,
-                migrationPaths = request.config.migrationPaths?.let { 
-                    "[${it.joinToString(",") { "\"$it\"" }}]" 
+                migrationPaths = request.config.migrationPaths?.let {
+                    "[${it.joinToString(",") { "\"$it\"" }}]"
                 },
                 schemaPath = request.config.schemaPath,
                 codePath = request.config.codePath
@@ -40,7 +49,7 @@ class AnalysisController(
             CompletableFuture.runAsync {
                 try {
                     when (request.mode.lowercase()) {
-                        "static" -> sqlStaticAnalyzer.analyzeCode(runId, config)
+                        "static" -> asyncAnalysisService.executeAnalysisAsync(runId, config, "static")
                         "dynamic" -> {
                             // Dynamic analysis not implemented in Phase 1
                             throw UnsupportedOperationException("Dynamic analysis not yet implemented")

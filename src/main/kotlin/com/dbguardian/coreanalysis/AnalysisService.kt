@@ -24,7 +24,6 @@ class AnalysisService(
 ) {
     
     fun execute(config: AnalysisConfig): UUID {
-        // Simple mode determination - business logic
         val mode = when (config.source.lowercase()) {
             "repo", "file" -> AnalysisMode.STATIC
             "text" -> AnalysisMode.DYNAMIC
@@ -39,31 +38,7 @@ class AnalysisService(
         val savedRun = analysisRunRepository.save(analysisRun)
         return savedRun.id
     }
-    
-    fun completeAnalysisWithReport(runId: UUID, report: AnalysisReport) {
-        val analysisRun = analysisRunRepository.findById(runId)
-            .orElseThrow { IllegalArgumentException("Analysis run not found: $runId") }
-        
-        // Store report using configured storage
-        val reportLocation = reportStorage.storeReport(report)
-        reportStorage.storeMarkdownReport(report)
-        
-        // Use domain logic to complete analysis
-        val summary = AnalysisSummary(
-            totalIssues = report.summary.totalIssues,
-            criticalIssues = report.summary.criticalIssues,
-            warningIssues = report.summary.warningIssues,
-            infoIssues = report.summary.infoIssues,
-            filesAnalyzed = report.summary.filesAnalyzed,
-            queriesAnalyzed = report.summary.queriesAnalyzed
-        )
-        
-        analysisRun.complete(summary)
-        analysisRun.attachReport(reportLocation.bucket ?: "", reportLocation.key ?: "")
-        
-        analysisRunRepository.save(analysisRun)
-    }
-    
+
     fun getReportUrl(runId: UUID): String? {
         val analysisRun = analysisRunRepository.findById(runId).orElse(null) ?: return null
         
