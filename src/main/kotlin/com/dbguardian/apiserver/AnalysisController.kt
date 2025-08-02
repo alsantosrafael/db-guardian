@@ -5,19 +5,22 @@ import com.dbguardian.coreanalysis.AnalysisService
 import com.dbguardian.coreanalysis.domain.*
 import com.dbguardian.staticanalysis.SqlStaticAnalyzer
 import jakarta.validation.Valid
+import org.slf4j.LoggerFactory
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
 import java.util.*
 import java.util.concurrent.CompletableFuture
+import java.util.logging.Logger
 
 @RestController
 @RequestMapping("/api/v1")
 class AnalysisController(
     private val analysisService: AnalysisService,
-    private val sqlStaticAnalyzer: SqlStaticAnalyzer
+    private val sqlStaticAnalyzer: SqlStaticAnalyzer,
 ) {
-    
+    private val logger = LoggerFactory.getLogger(javaClass)
+
     @PostMapping("/analysis")
     fun startAnalysis(@Valid @RequestBody request: AnalysisRequest): ResponseEntity<AnalysisResponse> {
         try {
@@ -46,6 +49,7 @@ class AnalysisController(
                     }
                 } catch (e: Exception) {
                     // Only fail analysis if it hasn't already completed successfully
+                    logger.error(e.message)
                     val analysisRun = analysisService.getAnalysisRun(runId)
                     if (analysisRun?.status != AnalysisStatus.COMPLETED) {
                         analysisService.failAnalysis(runId)
@@ -53,11 +57,12 @@ class AnalysisController(
                 }
             }
             
-            return ResponseEntity.ok(AnalysisResponse(runId = runId, status = "started"))
+            return ResponseEntity.ok(AnalysisResponse(runId = runId, status = AnalysisStatus.STARTED))
             
         } catch (e: Exception) {
+            logger.error(e.message)
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(AnalysisResponse(runId = UUID.randomUUID(), status = "error: ${e.message}"))
+                .body(AnalysisResponse(runId = null, status = AnalysisStatus.FAILED))
         }
     }
     
@@ -91,8 +96,22 @@ class AnalysisController(
             }
             
         } catch (e: Exception) {
+            logger.error(e.message)
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(mapOf("error" to "Failed to generate report: ${e.message}"))
+        }
+    }
+
+    @GetMapping("/analysis/{runId}/status")
+    fun checkStatus(@PathVariable("runId") runId: UUID): ResponseEntity<AnalysisResponse> {
+        try {
+            val analysisRun = analysisService.getAnalysisRun(runId)
+                ?: return ResponseEntity.notFound().build()
+            return ResponseEntity.ok().body(AnalysisResponse(analysisRun.id, analysisRun.status))
+        } catch (e: Exception) {
+            logger.error(e.message)
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(AnalysisResponse(runId = null, status = AnalysisStatus.FAILED))
         }
     }
     

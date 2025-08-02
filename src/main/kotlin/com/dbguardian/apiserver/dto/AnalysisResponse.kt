@@ -1,11 +1,12 @@
 package com.dbguardian.apiserver.dto
 
+import com.dbguardian.coreanalysis.domain.AnalysisStatus
 import java.util.UUID
 
 
 data class AnalysisResponse(
-    val runId: UUID,
-    val status: String
+    val runId: UUID?,
+    val status: AnalysisStatus
 )
 
 data class ReportResponse(
