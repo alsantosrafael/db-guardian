@@ -1,7 +1,7 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 // Versão simplificada - será atualizada pelo CI
-val appVersion = "0.0.1"
+val appVersion = "0.3.1"
 
 plugins {
     id("org.springframework.boot") version "3.2.0"
