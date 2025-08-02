@@ -3,7 +3,7 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
 // Versão simplificada - será atualizada pelo CI
-val appVersion = "0.0.1"
+val appVersion = "0.4.2"
 
 plugins {
     id("org.springframework.boot") version "3.2.0"
