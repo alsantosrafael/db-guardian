@@ -1,60 +1,24 @@
-# Query Analyzer
+# DB Guardian
 
-A **SQL static analysis system** for JVM environments that scans repositories for SQL and database-related files, analyzes them using pattern-based detection, and generates comprehensive reports stored in S3.
+SQL static analysis system for JVM environments. Scans repositories for SQL files and database code, analyzes them using pattern-based detection, and generates reports stored in S3.
 
-## 🔍 **How It Works**
+## How It Works
 
-Query Analyzer performs intelligent static analysis of SQL code found in JVM projects (Spring Data JPA, Hibernate, JDBC), detecting common SQL issues and anti-patterns through rule-based analysis.
+1. **Repository Scanning** → Scans for SQL/database files (SQL, Kotlin, Java, Scala, Groovy)
+2. **SQL Extraction** → Extracts SQL using language-specific patterns  
+3. **Pattern Analysis** → Detects common SQL issues and anti-patterns
+4. **Issue Classification** → Categorizes by severity (CRITICAL, WARNING, INFO)
+5. **Report Generation** → Generates markdown and JSON reports stored in S3
 
-**Current Approach**: Pattern-based SQL analysis with plans for RAG enhancement. The system provides immediate value through proven static analysis techniques while being designed for future AI augmentation.
+## Key Features
 
-### **Current Analysis Flow**
-
-1. **Repository Scanning** → System scans for SQL/database files (SQL, Kotlin, Java, Scala, Groovy)
-2. **SQL Extraction** → Smart extraction using language-specific patterns  
-3. **Pattern Analysis** → Rule-based detection of common SQL issues and anti-patterns
-4. **Issue Classification** → Issues categorized by severity (CRITICAL, WARNING, INFO)
-5. **Report Generation** → Rich markdown and JSON reports stored in S3
-6. **API Access** → RESTful endpoints for analysis requests and report retrieval
-
-**🚀 Planned RAG Enhancement**: Vector embeddings and AI-powered suggestions coming in future iterations.
-
-### **Architecture Highlights**
-
-- **Clean separation of concerns** - API, analysis, persistence, and reporting layers
-- **Unified configuration** - Single application.yml with profile-based overrides
-- **Local development ready** - Docker Compose with LocalStack S3 emulation
-
-## ✨ **Key Features**
-
-### 🔍 **Pattern-Based Analysis**
-- **Rule-based detection** for common SQL anti-patterns and issues
+- **Rule-based detection** for SQL anti-patterns (SELECT *, missing WHERE clauses, etc.)
 - **JVM-focused** analysis (Spring Data JPA, Hibernate, JDBC)
-- **Multiple severity levels** (CRITICAL, WARNING, INFO)
-- **Comprehensive pattern matching** for SELECT *, missing WHERE clauses, etc.
-
-### 📁 **JVM-Focused File Scanning**
-- **JVM languages**: Kotlin, Java, Scala, Groovy
-- **SQL files**: .sql, .ddl, .dml, .pgsql, .mysql
-- **Intelligent extraction**: Detects SQL in code strings, annotations, and configuration
-- **Auto-detection**: Finds migration, schema, entity, repository, and DAO files
-
-### 🔒 **Production-Ready Security**
-- **Unified configuration**: Environment-based settings with Spring profiles
-- **LocalStack integration**: Local S3 development environment
-- **Secure defaults**: Proper database connection pooling and error handling
-
-### 📊 **Comprehensive Reporting**
-- **Rich markdown reports**: Professional formatting with emojis and syntax highlighting
-- **JSON metadata**: Machine-readable analysis results
-- **S3 organization**: `reports/YYYY/MM/DD/runId.{md|json}` structure
-- **Issue grouping**: By severity, technique, and file location
-
-### 🚀 **Production-Ready API**
-- **Async processing**: Background analysis with status tracking
-- **REST endpoints**: `/api/analyze`, `/api/report/{runId}`, `/actuator/health`
-- **Spring Boot**: Modern Spring Boot 3.x with Kotlin
-- **Clean architecture**: Domain-driven design with separation of concerns
+- **Multiple file types**: SQL files, Kotlin, Java, Scala, Groovy
+- **Async processing** with REST API endpoints
+- **Rich reporting** with markdown and JSON formats
+- **S3 storage** with organized report structure
+- **Local development** with Docker Compose and LocalStack
 
 ## Quick Start
 
@@ -66,68 +30,46 @@ Query Analyzer performs intelligent static analysis of SQL code found in JVM pro
 
 ### Configuration
 
-**🎯 Unified Configuration System**
+Configuration is managed through `application.yml` with Spring profiles:
 
-All environment configuration is managed through a single `application.yml` with Spring profiles:
+- **`local`** - LocalStack S3, PostgreSQL via Docker
+- **`production`** - AWS S3, production database
 
-- **`local` profile** - LocalStack S3, PostgreSQL via Docker
-- **`docker` profile** - Container-optimized settings
-- **`production` profile** - AWS S3, production database
-
-**Key Configuration Properties:**
-```yaml
-spring:
-  profiles:
-    active: ${SPRING_PROFILES_ACTIVE:local}
-  datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/queryanalyzer}
-    username: ${DB_USERNAME:queryanalyzer}
-    password: ${DB_PASSWORD:password}
-
-aws:
-  s3:
-    endpoint: ${AWS_S3_ENDPOINT:}  # LocalStack for local development
-    region: ${AWS_REGION:us-east-1}
-
-app:
-  reports:
-    s3:
-      bucket: ${REPORTS_S3_BUCKET:dbguardian}
+Key environment variables:
+```bash
+SPRING_PROFILES_ACTIVE=local
+DATABASE_URL=jdbc:postgresql://localhost:5432/dbguardian
+S3_BUCKET=dbguardian
+API_TOKEN=your-secure-token
 ```
 
-**Benefits of This Approach:**
-- ✅ **No `.env` files needed** - Pure Spring Boot configuration
-- ✅ **Profile-specific settings** - Different configs for local/prod
-- ✅ **Environment variable override** - Secure credential injection
-- ✅ **IDE integration** - IntelliJ/VS Code understand Spring profiles
+### Local Development
 
-### Local Development (Recommended)
-
-**🚀 One-Command Setup:**
+**Quick Setup:**
 ```bash
 # Start everything: services + S3 bucket + application
 ./dev.sh
 ```
 
-**🔧 Manual Setup:**
+**Manual Setup:**
 ```bash
-# Start required services (PostgreSQL, LocalStack S3)
+# Start services
 docker-compose up -d postgres localstack
 
-# Create S3 bucket (CRITICAL - prevents analysis failures!)
+# Create S3 bucket
 aws --endpoint-url=http://localhost:4566 s3 mb s3://dbguardian
 
-# Run the application
+# Run application
 SPRING_PROFILES_ACTIVE=local ./gradlew bootRun
 ```
 
-**🔍 Test the System:**
+**Test the System:**
 ```bash
 # Health check
 curl http://localhost:8080/actuator/health
 
-# Run analysis on test data (requires authentication)
-curl -X POST http://localhost:8080/api/analyze \
+# Run analysis
+curl -X POST http://localhost:8080/api/v1/analysis \
   -H "Content-Type: application/json" \
   -H "x-api-token: abacaxi" \
   -d '{
@@ -137,60 +79,28 @@ curl -X POST http://localhost:8080/api/analyze \
       "dialect": "POSTGRESQL"
     }
   }'
-
-# Get report (use runId from previous response)
-curl "http://localhost:8080/api/report/{runId}"
-
-# Download reports locally
-./scripts/download-reports.sh
-./scripts/view-reports.sh
-```
-
-**🐛 Troubleshooting:**
-```bash
-# Check all services status
-docker-compose ps
-
-# View service logs
-docker-compose logs postgres localstack
-
-# Reset environment (fresh start)
-docker-compose down --volumes
 ```
 
 ### Production Setup
 
-1. **Configure Environment Variables**
 ```bash
+# Set environment variables
 export SPRING_PROFILES_ACTIVE=production
-export REPORTS_S3_BUCKET=your-s3-bucket
-export AWS_REGION=us-east-1
-export DB_USERNAME=queryanalyzer
-export DB_PASSWORD=your_secure_password
-```
+export S3_BUCKET=your-s3-bucket
+export DATABASE_URL=jdbc:postgresql://your-db:5432/dbguardian
+export API_TOKEN=your-secure-token
 
-*Note: All configuration is managed through Spring Boot's `application.yml` files. No `.env` files needed!*
-
-2. **Start PostgreSQL**
-```bash
-docker run --name queryanalyzer-db \
-  -e POSTGRES_DB=queryanalyzer \
-  -e POSTGRES_USER=queryanalyzer \
-  -e POSTGRES_PASSWORD=password \
-  -p 5432:5432 -d postgres:15
-```
-
-3. **Run Application**
-```bash
+# Run application
 ./gradlew bootRun
 ```
 
 ### API Usage
 
-**Start Repository Analysis**
+**Start Analysis**
 ```bash
-curl -X POST http://localhost:8080/api/analyze \
+curl -X POST http://localhost:8080/api/v1/analysis \
   -H "Content-Type: application/json" \
+  -H "x-api-token: your-token" \
   -d '{
     "mode": "STATIC",
     "source": "src/main/kotlin",
@@ -200,10 +110,9 @@ curl -X POST http://localhost:8080/api/analyze \
   }'
 ```
 
-**Get Report**
+**Get Status**
 ```bash
-curl "http://localhost:8080/api/report/{runId}"
-# Returns: {"runId": "...", "status": "completed", "critical": 0, "warnings": 2}
+curl "http://localhost:8080/api/v1/analysis/{runId}/status"
 ```
 
 ## 🏗️ **System Architecture**
@@ -331,15 +240,3 @@ The scanner detects SQL in these JVM-focused file types:
 # Quick k6 test without reports
 k6 run load-tests/load-test.js
 ```
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make changes following the existing code patterns
-4. Add tests for new functionality
-5. Submit a pull request
-
-## License
-
-MIT License - see LICENSE file for details.
