@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# Query Analyzer - Smoke Test Script
+# DB Guardian - Smoke Test Script
 # Tests the full analysis workflow
 
 set -e
 
-echo "🧪 Running Query Analyzer Smoke Test"
+echo "🧪 Running Db Guardian Smoke Test"
 echo "===================================="
 
 # Check if application is running

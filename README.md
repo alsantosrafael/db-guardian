@@ -117,7 +117,7 @@ curl "http://localhost:8080/api/v1/analysis/{runId}/status"
 
 ## 🏗️ **System Architecture**
 
-Query Analyzer uses a **clean, modular architecture** built with Spring Boot:
+DB Guardian uses a **clean, modular architecture** built with Spring Boot:
 
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
