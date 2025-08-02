@@ -15,7 +15,7 @@ class AsyncAnalysisService(
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
     
-    @Async("ioExecutor")
+    @Async("cpuExecutor")
     fun executeAnalysisAsync(runId: UUID, config: AnalysisConfig, mode: String) {
         try {
             when (mode.lowercase()) {

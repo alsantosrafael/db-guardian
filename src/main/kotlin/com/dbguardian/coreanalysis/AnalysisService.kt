@@ -11,6 +11,8 @@ import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.util.UUID
 import java.util.concurrent.CompletableFuture
+import java.util.concurrent.Executor
+import org.springframework.beans.factory.annotation.Qualifier
 
 /**
  * Application Service - practical DDD approach
@@ -20,7 +22,8 @@ import java.util.concurrent.CompletableFuture
 @Transactional
 class AnalysisService(
     private val analysisRunRepository: AnalysisRunRepository,
-    private val reportStorage: S3ReportStorage
+    private val reportStorage: S3ReportStorage,
+    @Qualifier("ioExecutor") private val ioExecutor: Executor
 ) {
     
     fun execute(config: AnalysisConfig): UUID {
@@ -72,26 +75,24 @@ class AnalysisService(
         val overallStart = System.currentTimeMillis()
         println("🔍 Starting concurrent storage operations...")
         
-        // JSON report storage
-        val jsonStart = System.currentTimeMillis()
-        val jsonReportFuture = CompletableFuture.supplyAsync {
+        // JSON report storage (I/O operation - use ioExecutor with virtual threads)
+        val jsonReportFuture = CompletableFuture.supplyAsync({
             val operationStart = System.currentTimeMillis()
-            println("🟡 JSON report storage started at: ${operationStart - overallStart}ms")
+            println("🟡 JSON report storage started at: ${operationStart - overallStart}ms (ioExecutor)")
             val result = reportStorage.storeReport(report)
             val operationEnd = System.currentTimeMillis()
             println("🟢 JSON report storage completed in: ${operationEnd - operationStart}ms")
             result
-        }
+        }, ioExecutor)
 
-        // Markdown report storage
-        val markdownStart = System.currentTimeMillis()
-        val markdownReportFuture = CompletableFuture.runAsync {
+        // Markdown report storage (I/O operation - use ioExecutor with virtual threads)
+        val markdownReportFuture = CompletableFuture.runAsync({
             val operationStart = System.currentTimeMillis()
-            println("🟡 Markdown report storage started at: ${operationStart - overallStart}ms")
+            println("🟡 Markdown report storage started at: ${operationStart - overallStart}ms (ioExecutor)")
             reportStorage.storeMarkdownReport(report)
             val operationEnd = System.currentTimeMillis()
             println("🟢 Markdown report storage completed in: ${operationEnd - operationStart}ms")
-        }
+        }, ioExecutor)
 
         val summary = AnalysisSummary(
             totalIssues = report.summary.totalIssues,
@@ -102,17 +103,17 @@ class AnalysisService(
             queriesAnalyzed = report.summary.queriesAnalyzed
         )
 
-        // Database update (depends on JSON completion)
+        // Database update (depends on JSON completion) - I/O operation, use ioExecutor
         val databaseUpdateFuture = jsonReportFuture.thenCompose { reportLocation ->
-            CompletableFuture.runAsync {
+            CompletableFuture.runAsync({
                 val operationStart = System.currentTimeMillis()
-                println("🟡 Database update started at: ${operationStart - overallStart}ms")
+                println("🟡 Database update started at: ${operationStart - overallStart}ms (ioExecutor)")
                 analysisRun.complete(summary)
                 analysisRun.attachReport(reportLocation.bucket ?: "", reportLocation.key ?: "")
                 analysisRunRepository.save(analysisRun)
                 val operationEnd = System.currentTimeMillis()
                 println("🟢 Database update completed in: ${operationEnd - operationStart}ms")
-            }
+            }, ioExecutor)
         }
 
         CompletableFuture.allOf(markdownReportFuture, databaseUpdateFuture).join()

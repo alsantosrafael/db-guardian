@@ -20,7 +20,6 @@ import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
 
 import java.util.*
-import java.util.concurrent.CompletableFuture
 
 @RestController
 @RequestMapping("/api/v1")
@@ -45,25 +44,14 @@ class AnalysisController(
             
             val runId = analysisService.execute(config)
             
-            // Run analysis asynchronously
-            CompletableFuture.runAsync {
-                try {
-                    when (request.mode.lowercase()) {
-                        "static" -> asyncAnalysisService.executeAnalysisAsync(runId, config, "static")
-                        "dynamic" -> {
-                            // Dynamic analysis not implemented in Phase 1
-                            throw UnsupportedOperationException("Dynamic analysis not yet implemented")
-                        }
-                        else -> throw IllegalArgumentException("Invalid mode: ${request.mode}")
-                    }
-                } catch (e: Exception) {
-                    // Only fail analysis if it hasn't already completed successfully
-                    logger.error(e.message)
-                    val analysisRun = analysisService.getAnalysisRun(runId)
-                    if (analysisRun?.status != AnalysisStatus.COMPLETED) {
-                        analysisService.failAnalysis(runId)
-                    }
+            // Run analysis asynchronously - AsyncAnalysisService already handles @Async execution
+            when (request.mode.lowercase()) {
+                "static" -> asyncAnalysisService.executeAnalysisAsync(runId, config, "static")
+                "dynamic" -> {
+                    // Dynamic analysis not implemented in Phase 1
+                    throw UnsupportedOperationException("Dynamic analysis not yet implemented")
                 }
+                else -> throw IllegalArgumentException("Invalid mode: ${request.mode}")
             }
             
             return ResponseEntity.ok(AnalysisResponse(runId = runId, status = AnalysisStatus.STARTED))

@@ -4,10 +4,12 @@ import com.dbguardian.coreanalysis.AnalysisService
 import com.dbguardian.coreanalysis.domain.*
 import com.dbguardian.reporting.*
 import org.springframework.stereotype.Service
+import org.springframework.beans.factory.annotation.Qualifier
 import java.io.File
 import java.time.LocalDateTime
 import java.util.UUID
-import java.util.stream.Collectors
+import java.util.concurrent.Executor
+import java.util.concurrent.CompletableFuture
 
 /**
  * Static analyzer focused on JVM environments
@@ -17,7 +19,9 @@ import java.util.stream.Collectors
 @Service
 class SqlStaticAnalyzer(
     private val sqlParser: SqlParser,
-    private val analysisService: AnalysisService
+    private val analysisService: AnalysisService,
+    @Qualifier("cpuExecutor") private val cpuExecutor: Executor,
+    @Qualifier("ioExecutor") private val ioExecutor: Executor
 ) {
     
     fun analyzeCode(runId: UUID, config: AnalysisConfig) {
@@ -29,16 +33,20 @@ class SqlStaticAnalyzer(
             println("🔍 Found ${sqlFiles.size} JVM/SQL files to analyze: ${sqlFiles.map { it.absolutePath }}")
 
             val processStart = System.currentTimeMillis()
-            // Analyzing files concurrently
-            val allQueries = sqlFiles.parallelStream()
-                .flatMap { file ->
+            // Analyzing files concurrently using cpuExecutor for CPU-intensive work
+            println("🖥️  Using cpuExecutor for file processing (CPU-intensive)")
+            val fileProcessingTasks = sqlFiles.map { file ->
+                CompletableFuture.supplyAsync({
                     val fileProcessStart = System.currentTimeMillis()
-                    println("📄 Processing: ${file.absolutePath}")
+                    println("📄 Processing: ${file.absolutePath} (cpuExecutor)")
                     val queries = extractAndParseQueries(file)
                     val processingTime = System.currentTimeMillis() - fileProcessStart
-                    println("📄 File ${file.name} took: ${processingTime}ms for ${queries.size} queries (parallel)")
-                    queries.stream().map { query -> query to file.absolutePath }
-            }.collect(Collectors.toList())
+                    println("📄 File ${file.name} took: ${processingTime}ms for ${queries.size} queries (cpuExecutor)")
+                    queries.map { query -> query to file.absolutePath }
+                }, cpuExecutor)
+            }
+            
+            val allQueries = fileProcessingTasks.map { it.get() }.flatten()
             println("📊 Total file processing: ${System.currentTimeMillis() - processStart}ms")
 
             println("🔍 Found ${allQueries.size} SQL queries to analyze")
