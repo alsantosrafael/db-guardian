@@ -28,27 +28,55 @@ SQL static analysis system for JVM environments. Scans repositories for SQL file
 - PostgreSQL database
 - S3-compatible storage (AWS S3 or LocalStack)
 
+### Universal Runner Script
+
+DB Guardian provides a universal `run.sh` script that supports both API server and CLI modes:
+
+**API Server Mode (default):**
+```bash
+./run.sh                    # Start Spring Boot API server
+./run.sh --mode api         # Same as above
+```
+
+**CLI Mode:**
+```bash
+./run.sh --mode cli --cli-args "scan ./src --verbose"
+./run.sh --mode cli --cli-args "help"
+```
+
+**Help:**
+```bash
+./run.sh --help            # Show usage information
+```
+
 ## 🖥️ **Command Line Interface (CLI)**
 
 DB Guardian provides a lightweight CLI for quick SQL analysis without requiring the full Spring Boot application setup.
 
 ### **CLI Usage**
 
-**Basic scan:**
+**Using run.sh (Recommended):**
 ```bash
-./gradlew run --args="scan ./src/main/kotlin"
-```
+# Basic scan
+./run.sh --mode cli --cli-args "scan ./src/main/kotlin"
 
-**With options:**
-```bash
 # Verbose output with detailed analysis
-./gradlew run --args="scan ./src/main/kotlin --verbose"
+./run.sh --mode cli --cli-args "scan ./src/main/kotlin --verbose"
 
 # Production-only mode (excludes test files)
-./gradlew run --args="scan ./src/main/kotlin --production-only"
+./run.sh --mode cli --cli-args "scan ./src/main/kotlin --production-only"
 
-# Scan specific file or directory
-./gradlew run --args="scan ./path/to/files --verbose --production-only"
+# Show CLI help
+./run.sh --mode cli --cli-args "help"
+```
+
+**Direct Gradle usage:**
+```bash
+# Basic scan
+./gradlew run --args="scan ./src/main/kotlin"
+
+# With options
+./gradlew run --args="scan ./src/main/kotlin --verbose --production-only"
 ```
 
 **Using the bash wrapper script:**

@@ -20,8 +20,7 @@ import java.util.concurrent.CompletableFuture
 class SqlStaticAnalyzer(
     private val sqlParser: SqlParser,
     private val analysisService: AnalysisService,
-    @Qualifier("cpuExecutor") private val cpuExecutor: Executor,
-    @Qualifier("ioExecutor") private val ioExecutor: Executor
+    @Qualifier("cpuExecutor") private val cpuExecutor: Executor
 ) {
     
     fun analyzeCode(runId: UUID, config: AnalysisConfig) {
@@ -58,9 +57,6 @@ class SqlStaticAnalyzer(
             // Complete analysis with S3 report storage
             println("💾 Storing analysis report to S3 and updating database")
             val storageStart = System.currentTimeMillis()
-            val dbStart = System.currentTimeMillis()
-            val jsonStart = System.currentTimeMillis()
-            val markdownStart = System.currentTimeMillis()
 
             analysisService.completeAnalysisWithReportConcurrent(runId, report)
             println("💾 Storage took: ${System.currentTimeMillis() - storageStart}ms")
