@@ -51,6 +51,11 @@ storage:
 security:
   api-token: ${API_TOKEN:abacaxi}
 
+# CLI Configuration
+dbguardian:
+  cli:
+    enabled: ${CLI_ENABLED:false}
+
 logging:
   level:
     com.dbguardian: ${LOG_LEVEL:INFO}

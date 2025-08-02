@@ -28,6 +28,107 @@ SQL static analysis system for JVM environments. Scans repositories for SQL file
 - PostgreSQL database
 - S3-compatible storage (AWS S3 or LocalStack)
 
+## 🖥️ **Command Line Interface (CLI)**
+
+DB Guardian provides a lightweight CLI for quick SQL analysis without requiring the full Spring Boot application setup.
+
+### **CLI Usage**
+
+**Basic scan:**
+```bash
+./gradlew run --args="scan ./src/main/kotlin"
+```
+
+**With options:**
+```bash
+# Verbose output with detailed analysis
+./gradlew run --args="scan ./src/main/kotlin --verbose"
+
+# Production-only mode (excludes test files)
+./gradlew run --args="scan ./src/main/kotlin --production-only"
+
+# Scan specific file or directory
+./gradlew run --args="scan ./path/to/files --verbose --production-only"
+```
+
+**Using the bash wrapper script:**
+```bash
+# Make script executable
+chmod +x db-guardian-scan.sh
+
+# Quick scan
+./db-guardian-scan.sh ./src/main/kotlin
+
+# With options
+./db-guardian-scan.sh ./src/main/kotlin --verbose --production-only
+
+# Show help
+./db-guardian-scan.sh --help
+```
+
+### **CLI Options**
+
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--verbose` | `-v` | Show detailed analysis with file-by-file progress |
+| `--production-only` | `-p` | Skip test files (excludes `/test/`, `*Test.*`, `*Spec.*`) |
+| `--help` | `-h` | Show usage help |
+
+### **CLI Features**
+
+- **🚀 Lightweight**: No Spring Boot dependencies, runs independently
+- **⚡ Fast**: Analyzes ~100 files in under 100ms
+- **🎯 Smart filtering**: Context-aware test file detection
+- **📊 Rich output**: Categorized issues (CRITICAL, WARNING, INFO)
+- **🔄 Fallback**: Automatic fallback to basic bash analysis if needed
+
+### **CLI Output Example**
+
+```bash
+🛡️  DB Guardian - Spring Boot SQL Linter
+==========================================
+
+🔍 Scanning: ./src/main/kotlin
+📋 Mode: Production only (excluding test files)
+
+📁 Files to analyze: 21
+
+📊 Analysis Results
+===================
+⏱️  Analysis time: 67ms
+📁 Files analyzed: 21
+🔍 Queries found: 98
+🚨 Critical issues: 1
+⚠️  Warning issues: 0
+ℹ️  Info issues: 0
+
+🚨 CRITICAL Issues Found (1)
+======================================
+  • AnalysisService.kt: UPDATE/DELETE without WHERE clause affects all rows
+
+💡 Focus on CRITICAL issues first, then WARNING.
+🔧 For complete analysis with all rules, use: ./gradlew bootRun
+```
+
+### **Supported Languages & Frameworks**
+
+The CLI analyzes SQL code in:
+- **JVM Languages**: Kotlin, Java, Scala, Groovy
+- **SQL Files**: `.sql`, `.ddl`, `.dml`, `.pgsql`, `.mysql`
+- **Spring Boot**: Spring Data JPA, JDBC, Hibernate
+- **Other**: Any file containing SQL keywords
+
+### **Detection Rules**
+
+| Rule | Severity | Description |
+|------|----------|-------------|
+| SQL Injection | CRITICAL | String concatenation in queries (`SELECT * FROM users WHERE id = '" + id + "'"`) |
+| Missing WHERE | CRITICAL | UPDATE/DELETE without WHERE clause |
+| SELECT * Usage | WARNING | Performance/maintainability risk |
+| Inefficient LIKE | WARNING | LIKE patterns with leading % (cannot use indexes) |
+| @Modifying Issues | WARNING | Spring Data JPA @Modifying without @Transactional |
+| Native Query Risk | CRITICAL | Native queries without parameters |
+
 ### Configuration
 
 Configuration is managed through `application.yml` with Spring profiles:

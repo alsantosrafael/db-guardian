@@ -9,6 +9,7 @@ plugins {
     kotlin("jvm") version "1.9.20"
     kotlin("plugin.spring") version "1.9.20"
     kotlin("plugin.jpa") version "1.9.20"
+    application
 }
 
 group = "com.queryanalyzer"
@@ -71,6 +72,16 @@ tasks.withType<KotlinCompile> {
         freeCompilerArgs += "-Xjsr305=strict"
         jvmTarget = "21"
     }
+}
+
+// Specify main class
+springBoot {
+    mainClass.set("com.dbguardian.DbGuardianApplicationKt")
+}
+
+// For CLI usage
+application {
+    mainClass.set("com.dbguardian.cli.CliTool")
 }
 
 tasks.withType<Test> {
