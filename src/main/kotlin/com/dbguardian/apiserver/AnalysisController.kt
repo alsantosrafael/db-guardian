@@ -3,10 +3,10 @@ package com.dbguardian.apiserver
 import com.dbguardian.apiserver.dto.AnalysisRequest
 import com.dbguardian.apiserver.dto.AnalysisResponse
 import com.dbguardian.apiserver.dto.ReportResponse
-import com.dbguardian.coreanalysis.AnalysisService
-import com.dbguardian.coreanalysis.AsyncAnalysisService
-import com.dbguardian.coreanalysis.domain.AnalysisConfig
-import com.dbguardian.coreanalysis.domain.AnalysisStatus
+import com.dbguardian.core.AnalysisService
+import com.dbguardian.core.AsyncAnalysisService
+import com.dbguardian.core.domain.AnalysisConfig
+import com.dbguardian.core.domain.AnalysisStatus
 import jakarta.validation.Valid
 import org.slf4j.LoggerFactory
 import org.springframework.http.HttpStatus

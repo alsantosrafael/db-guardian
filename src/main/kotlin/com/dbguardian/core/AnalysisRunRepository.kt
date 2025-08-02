@@ -1,6 +1,6 @@
-package com.dbguardian.coreanalysis
+package com.dbguardian.core
 
-import com.dbguardian.coreanalysis.domain.AnalysisRun
+import com.dbguardian.core.domain.AnalysisRun
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.stereotype.Repository
 import java.util.UUID

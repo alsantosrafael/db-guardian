@@ -1,7 +1,7 @@
 package com.dbguardian.staticanalysis
 
-import com.dbguardian.coreanalysis.AnalysisService
-import com.dbguardian.coreanalysis.domain.*
+import com.dbguardian.core.AnalysisService
+import com.dbguardian.core.domain.*
 import com.dbguardian.reporting.*
 import org.springframework.stereotype.Service
 import org.springframework.beans.factory.annotation.Qualifier

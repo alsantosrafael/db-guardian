@@ -1,6 +1,6 @@
 package com.dbguardian.apiserver.dto
 
-import com.dbguardian.coreanalysis.domain.AnalysisStatus
+import com.dbguardian.core.domain.AnalysisStatus
 import java.util.UUID
 
 

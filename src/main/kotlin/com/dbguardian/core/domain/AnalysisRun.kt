@@ -1,4 +1,4 @@
-package com.dbguardian.coreanalysis.domain
+package com.dbguardian.core.domain
 
 import jakarta.persistence.Column
 import jakarta.persistence.Embeddable

@@ -1,9 +1,9 @@
-package com.dbguardian.coreanalysis
+package com.dbguardian.core
 
-import com.dbguardian.coreanalysis.domain.AnalysisConfig
-import com.dbguardian.coreanalysis.domain.AnalysisMode
-import com.dbguardian.coreanalysis.domain.AnalysisRun
-import com.dbguardian.coreanalysis.domain.AnalysisSummary
+import com.dbguardian.core.domain.AnalysisConfig
+import com.dbguardian.core.domain.AnalysisMode
+import com.dbguardian.core.domain.AnalysisRun
+import com.dbguardian.core.domain.AnalysisSummary
 import com.dbguardian.reporting.AnalysisReport
 import com.dbguardian.reporting.ReportLocation
 import com.dbguardian.reporting.S3ReportStorage

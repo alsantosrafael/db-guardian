@@ -1,7 +1,7 @@
-package com.dbguardian.coreanalysis
+package com.dbguardian.core
 
-import com.dbguardian.coreanalysis.domain.AnalysisConfig
-import com.dbguardian.coreanalysis.domain.AnalysisStatus
+import com.dbguardian.core.domain.AnalysisConfig
+import com.dbguardian.core.domain.AnalysisStatus
 import com.dbguardian.staticanalysis.SqlStaticAnalyzer
 import org.slf4j.LoggerFactory
 import org.springframework.scheduling.annotation.Async
